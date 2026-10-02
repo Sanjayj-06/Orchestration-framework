@@ -43,6 +43,7 @@ const AppContent: React.FC = () => {
   const [logs, setLogs] = useState<ExecutionLog[]>([]);
   const [isConsoleOpen, setIsConsoleOpen] = useState(true);
   const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
+  const [isDraggingOverCanvas, setIsDraggingOverCanvas] = useState(false);
 
   const { screenToFlowPosition } = useReactFlow();
 
@@ -86,7 +87,7 @@ const AppContent: React.FC = () => {
       const newNode: Node = {
         id,
         type,
-        position: { x: 400 + Math.random() * 80, y: 200 + Math.random() * 80 },
+        position: { x: 350 + Math.random() * 80, y: 150 + Math.random() * 80 },
         data: {
           label,
           category,
@@ -110,11 +111,17 @@ const AppContent: React.FC = () => {
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
+    if (!isDraggingOverCanvas) setIsDraggingOverCanvas(true);
+  }, [isDraggingOverCanvas]);
+
+  const onDragLeave = useCallback(() => {
+    setIsDraggingOverCanvas(false);
   }, []);
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
+      setIsDraggingOverCanvas(false);
 
       const dataString = event.dataTransfer.getData('application/reactflow');
       if (!dataString) return;
@@ -315,10 +322,21 @@ const AppContent: React.FC = () => {
         <Sidebar onAddNode={handleAddNode} />
 
         <main
-          className="flex-1 h-[calc(100vh-4rem)] relative"
+          className={`flex-1 h-[calc(100vh-4rem)] relative transition-all ${
+            isDraggingOverCanvas ? 'ring-4 ring-indigo-500/60 ring-inset bg-indigo-950/20' : ''
+          }`}
           onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
           onDrop={onDrop}
         >
+          {isDraggingOverCanvas && (
+            <div className="absolute inset-0 z-30 bg-indigo-600/10 backdrop-blur-[2px] flex items-center justify-center pointer-events-none border-2 border-dashed border-indigo-400">
+              <div className="bg-slate-900/90 text-indigo-300 font-semibold text-sm px-6 py-3 rounded-xl border border-indigo-500/40 shadow-2xl animate-bounce flex items-center gap-2">
+                <span>✦ Drop component here to add to canvas</span>
+              </div>
+            </div>
+          )}
+
           <ReactFlow
             nodes={nodes}
             edges={edges}
