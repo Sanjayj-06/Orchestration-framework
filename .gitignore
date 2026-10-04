@@ -1,3 +1,16 @@
+# Environment / secrets - NEVER commit these
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
 # Logs
 logs
 *.log
