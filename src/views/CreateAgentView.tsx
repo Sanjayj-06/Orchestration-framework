@@ -202,13 +202,18 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
             </div>
 
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 mt-1">
                   <Bot className="w-5 h-5" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-500">Agent Name</h3>
-                  <div className="text-lg font-bold text-slate-900">{spec.name}</div>
+                <div className="flex-1 max-w-sm">
+                  <label className="block text-sm font-semibold text-slate-500 mb-1">Agent Name</label>
+                  <input
+                    type="text"
+                    value={spec.name}
+                    onChange={(e) => setSpec({ ...spec, name: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-md px-3 py-1.5 text-[15px] font-bold text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition shadow-sm"
+                  />
                 </div>
               </div>
 
@@ -444,7 +449,7 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
             <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
               <button onClick={() => setStep(5)} className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-slate-500 hover:text-slate-900 transition"><ArrowLeft className="w-4 h-4"/> Back</button>
               <button onClick={handleCreateAgent} disabled={isSaving} className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[14px] font-medium transition shadow-sm">
-                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Create Agent
+                {isSaving && <Loader2 className="w-4 h-4 animate-spin" />} Create Agent
               </button>
             </div>
           </div>

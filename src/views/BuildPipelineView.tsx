@@ -39,7 +39,7 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState<string | null>(null);
 
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, deleteElements } = useReactFlow();
 
   const nodeTypes = useMemo(
     () => ({
@@ -108,13 +108,12 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
 
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
-      setNodes((nds) => nds.filter((node) => node.id !== nodeId));
-      setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+      deleteElements({ nodes: [{ id: nodeId }] });
       if (selectedNodeId === nodeId) {
         setSelectedNodeId(null);
       }
     },
-    [setNodes, setEdges, selectedNodeId]
+    [deleteElements, selectedNodeId]
   );
 
   const handleSave = () => {

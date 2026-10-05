@@ -151,12 +151,19 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
                        </div>
                     </div>
 
-                    <div className="pt-4 mt-4 border-t border-slate-100">
+                    <div className="pt-4 mt-4 border-t border-slate-100 space-y-2">
                        <button className="flex items-center justify-center gap-2 w-full py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-blue-600 transition shadow-sm">
                          Open Agent Configuration
                          <ExternalLink className="w-4 h-4" />
                        </button>
-                       <p className="text-[10px] text-slate-400 text-center mt-2">Agent internals cannot be edited in the pipeline builder.</p>
+                       <button 
+                         onClick={() => onDeleteNode(selectedNode.id)}
+                         className="flex items-center justify-center gap-2 w-full py-2 bg-white hover:bg-rose-50 border border-slate-200 rounded-lg text-sm font-semibold text-rose-600 transition shadow-sm"
+                       >
+                         Remove from Pipeline
+                         <Trash2 className="w-4 h-4" />
+                       </button>
+                       <p className="text-[10px] text-slate-400 text-center pt-2">Agent internals cannot be edited in the pipeline builder.</p>
                     </div>
                   </div>
                 );
@@ -189,12 +196,30 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
              <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-emerald-800 text-sm">
                 This node represents the beginning of the pipeline execution. When the pipeline runs, the initial user input is injected here and passed to the first agent.
              </div>
+             <div className="pt-4 border-t border-slate-100">
+               <button 
+                 onClick={() => onDeleteNode(selectedNode.id)}
+                 className="flex items-center justify-center gap-2 w-full py-2 bg-white hover:bg-rose-50 border border-slate-200 rounded-lg text-sm font-semibold text-rose-600 transition shadow-sm"
+               >
+                 Remove from Pipeline
+                 <Trash2 className="w-4 h-4" />
+               </button>
+             </div>
            </div>
         ) : selectedNode.type === 'outputNode' ? (
            <div className="space-y-4">
              <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Output Node</h4>
              <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl text-indigo-800 text-sm">
                 This node captures the final result of the pipeline. The output of the last connected agent will be returned as the pipeline's execution result.
+             </div>
+             <div className="pt-4 border-t border-slate-100">
+               <button 
+                 onClick={() => onDeleteNode(selectedNode.id)}
+                 className="flex items-center justify-center gap-2 w-full py-2 bg-white hover:bg-rose-50 border border-slate-200 rounded-lg text-sm font-semibold text-rose-600 transition shadow-sm"
+               >
+                 Remove from Pipeline
+                 <Trash2 className="w-4 h-4" />
+               </button>
              </div>
            </div>
         ) : (
