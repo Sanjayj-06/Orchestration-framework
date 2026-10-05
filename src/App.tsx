@@ -4,12 +4,12 @@ import { LandingView } from './views/LandingView';
 import { CreateAgentView } from './views/CreateAgentView';
 import { AgentDashboardView } from './views/AgentDashboardView';
 import { AgentLibraryView } from './views/AgentLibraryView';
-import { WorkflowsView } from './views/WorkflowsView';
+import { BuildPipelineView } from './views/BuildPipelineView';
 import type { Agent } from './types/agent';
 import { getAgents, getAgent, checkHealth } from './services/api';
 
 export const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<'landing' | 'library' | 'create' | 'dashboard' | 'workflows'>('landing');
+  const [currentTab, setCurrentTab] = useState<'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates'>('landing');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [activeAgent, setActiveAgent] = useState<Agent | null>(null);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
@@ -88,7 +88,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#030712] text-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen w-screen bg-slate-50 text-slate-900 overflow-hidden font-sans">
       <HeaderNav
         currentTab={currentTab}
         onNavigate={(tab) => {
@@ -106,8 +106,10 @@ export const App: React.FC = () => {
       <main className="flex-1 overflow-hidden relative flex flex-col">
         {currentTab === 'landing' && (
           <LandingView
+            agents={agents}
             onCreateAgent={handleStartCreateAgent}
             onExploreLibrary={() => setCurrentTab('library')}
+            onOpenAgent={handleOpenAgent}
           />
         )}
 
@@ -154,7 +156,13 @@ export const App: React.FC = () => {
           )
         )}
 
-        {currentTab === 'workflows' && <WorkflowsView />}
+        {currentTab === 'pipeline' && <BuildPipelineView agents={agents} />}
+        {currentTab === 'templates' && (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <h2 className="text-xl font-bold text-slate-900 mb-2">Agent Templates</h2>
+            <p className="text-sm text-slate-500 max-w-md">Browse pre-configured agent templates to get started quickly. (Coming soon)</p>
+          </div>
+        )}
       </main>
     </div>
   );

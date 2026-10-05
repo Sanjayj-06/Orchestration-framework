@@ -1,4 +1,4 @@
-﻿export type NodeTypeCategory = 'trigger' | 'llm' | 'memory' | 'tool' | 'logic';
+export type NodeTypeCategory = 'trigger' | 'llm' | 'memory' | 'tool' | 'logic' | 'agent';
 
 export interface NodeConfig {
   provider?: 'openai' | 'anthropic' | 'google' | 'meta';
