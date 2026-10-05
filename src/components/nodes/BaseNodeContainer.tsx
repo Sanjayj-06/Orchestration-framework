@@ -50,7 +50,7 @@ export const BaseNodeContainer: React.FC<BaseNodeContainerProps> = ({
         );
       default:
         return (
-          <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700">
+          <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 shadow-sm">
             {categoryLabel}
           </span>
         );
@@ -59,12 +59,12 @@ export const BaseNodeContainer: React.FC<BaseNodeContainerProps> = ({
 
   return (
     <div
-      className={`node-card relative group min-w-[260px] rounded-xl transition-all duration-200 backdrop-blur-md bg-slate-900/90 border text-slate-100 shadow-xl ${
+      className={`node-card relative group min-w-[260px] rounded-xl transition-all duration-200 backdrop-blur-md bg-white border text-slate-900 shadow-sm ${
         selected
-          ? 'border-indigo-500 ring-2 ring-indigo-500/40 shadow-indigo-500/20'
+          ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-blue-500/10'
           : data.status === 'running'
           ? 'border-amber-500/80 ring-2 ring-amber-500/30'
-          : 'border-slate-800 hover:border-slate-700'
+          : 'border-slate-200 hover:border-blue-300'
       }`}
     >
       <div
@@ -72,20 +72,20 @@ export const BaseNodeContainer: React.FC<BaseNodeContainerProps> = ({
         style={{ backgroundColor: categoryColor }}
       />
 
-      <div className="p-3 border-b border-slate-800/60 flex items-center justify-between gap-3">
+      <div className="p-3 border-b border-slate-100 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 shadow-inner"
-            style={{ backgroundColor: `${categoryColor}25`, border: `1px solid ${categoryColor}50` }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 shadow-sm"
+            style={{ backgroundColor: `${categoryColor}15`, border: `1px solid ${categoryColor}30` }}
           >
             {icon}
           </div>
           <div className="min-w-0">
-            <h4 className="text-sm font-semibold text-slate-100 truncate leading-tight">
+            <h4 className="text-sm font-semibold text-slate-900 truncate leading-tight">
               {data.label}
             </h4>
             {data.subtitle && (
-              <p className="text-[11px] text-slate-400 truncate mt-0.5">
+              <p className="text-[11px] text-slate-500 truncate mt-0.5">
                 {data.subtitle}
               </p>
             )}
@@ -100,14 +100,14 @@ export const BaseNodeContainer: React.FC<BaseNodeContainerProps> = ({
         <Handle
           type="target"
           position={Position.Left}
-          className="!w-3 !h-3 !bg-slate-900 !border-2 !border-indigo-400 hover:!scale-125 transition-transform"
+          className="!w-3 !h-3 !bg-white !border-2 !border-blue-400 hover:!scale-125 transition-transform"
         />
       )}
       {hasOutputHandle && (
         <Handle
           type="source"
           position={Position.Right}
-          className="!w-3 !h-3 !bg-slate-900 !border-2 !border-emerald-400 hover:!scale-125 transition-transform"
+          className="!w-3 !h-3 !bg-white !border-2 !border-emerald-400 hover:!scale-125 transition-transform"
         />
       )}
     </div>

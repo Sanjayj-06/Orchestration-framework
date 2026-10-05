@@ -1,20 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Bot,
-  Plus,
-  Play,
-  Edit,
-  Copy,
-  Download,
-  Trash2,
-  Globe,
-  FileText,
-  Calculator,
-  Terminal,
-  Database,
-  Search,
-  Loader2,
-  CheckCircle2
+  Plus, Edit, Copy, Download, Trash2, Search, Loader2, CheckCircle2, Bot
 } from 'lucide-react';
 import type { Agent } from '../types/agent';
 import { downloadAgentCode, duplicateAgent, deleteAgent } from '../services/api';
@@ -35,6 +21,7 @@ export const AgentLibraryView: React.FC<AgentLibraryViewProps> = ({
   onRefresh
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'all'|'active'|'drafts'|'archived'>('all');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -95,198 +82,153 @@ export const AgentLibraryView: React.FC<AgentLibraryViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-6 py-10 overflow-y-auto custom-scrollbar">
+    <div className="w-full flex flex-col h-full bg-slate-50">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-20 right-8 z-50 px-4 py-2.5 rounded-xl bg-slate-900 border border-indigo-500/50 text-indigo-200 text-xs font-medium shadow-2xl flex items-center gap-2 animate-fadeIn">
+        <div className="fixed top-20 right-8 z-50 px-4 py-2.5 rounded-md bg-slate-900 text-white text-xs font-medium shadow-lg flex items-center gap-2 animate-fadeIn">
           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Header & Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-100 tracking-tight">
-            My Agents
-          </h1>
-          <p className="mt-1 text-xs md:text-sm text-slate-400">
-            Open, run, edit, duplicate, or download your custom AI agents.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Search Input */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search your agents..."
-              className="bg-slate-900 border border-slate-800 focus:border-indigo-500 text-slate-100 text-xs rounded-xl pl-8 pr-3 py-2 w-48 sm:w-60 focus:outline-none transition"
-            />
+      {/* Header */}
+      <div className="px-8 py-8 border-b border-slate-200 bg-white">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+              My Agents
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Create, test and manage your AI agents.
+            </p>
           </div>
-
-          {/* Create CTA */}
-          <button
-            onClick={onCreateNew}
-            className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/20 transition active:scale-95 whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4" />
-            Create Agent
-          </button>
+          
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search agents..."
+                className="bg-white border border-slate-200 focus:border-blue-500 text-slate-900 placeholder:text-slate-400 text-[13px] rounded-md pl-9 pr-3 py-2 w-48 sm:w-64 focus:outline-none transition shadow-sm"
+              />
+            </div>
+            <button className="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-md text-[13px] font-medium text-slate-700 shadow-sm transition">
+              Filter
+            </button>
+            <button
+              onClick={onCreateNew}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[13px] font-medium shadow-sm transition active:scale-95 whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              Create Agent
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Empty State */}
-      {filteredAgents.length === 0 ? (
-        <div className="py-20 rounded-3xl bg-slate-900/40 border border-slate-800/80 flex flex-col items-center justify-center text-center p-6 space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-            <Bot className="w-8 h-8" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-slate-200">
-              {searchQuery ? 'No matching agents found' : "You haven't created any agents yet."}
-            </h3>
-            <p className="mt-1 text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-              {searchQuery
-                ? 'Try searching with a different term or clear the search filter.'
-                : 'Create your first AI agent by describing what you want it to do in plain English.'}
-            </p>
-          </div>
-          <button
-            onClick={onCreateNew}
-            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/20 transition"
-          >
-            <Plus className="w-4 h-4" />
-            Create Agent
-          </button>
+      <div className="flex-1 overflow-y-auto px-8 py-6 custom-scrollbar max-w-6xl w-full mx-auto">
+        <div className="flex items-center gap-6 border-b border-slate-200 mb-6">
+          {(['all', 'active', 'drafts', 'archived'] as const).map(tab => (
+            <button 
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`pb-3 text-[13px] font-medium capitalize transition border-b-2 ${
+                activeTab === tab 
+                  ? 'border-slate-900 text-slate-900' 
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
-      ) : (
-        /* Agent Cards Grid */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredAgents.map((agent) => {
-            const spec = agent.specification;
-            return (
-              <div
-                key={agent.id}
-                onClick={() => onOpenAgent(agent)}
-                className="group p-5 rounded-2xl bg-slate-900/70 border border-slate-800/80 hover:border-indigo-500/60 hover:bg-slate-900 transition cursor-pointer flex flex-col justify-between shadow-sm relative"
-              >
-                <div>
-                  {/* Top line: Name & Status */}
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h3 className="text-sm font-bold text-slate-100 group-hover:text-indigo-300 transition-colors line-clamp-1">
-                      {agent.name}
-                    </h3>
-                    <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-medium shrink-0 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                      Active
-                    </span>
-                  </div>
 
-                  {/* Purpose */}
-                  <p className="text-xs text-slate-400 leading-relaxed line-clamp-2 mb-4">
-                    {agent.purpose}
-                  </p>
-
-                  {/* Capabilities Chips */}
-                  <div className="flex flex-wrap gap-1 mb-4">
-                    {spec.capabilities.web_search && (
-                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-300 border border-blue-500/20">
-                        <Globe className="w-2.5 h-2.5" /> Web
+        {filteredAgents.length === 0 ? (
+          <div className="py-24 flex flex-col items-center justify-center text-center">
+            <h3 className="text-[15px] font-semibold text-slate-900">No agents found.</h3>
+            <p className="mt-1 text-[13px] text-slate-500">Create an agent to get started.</p>
+            <button onClick={onCreateNew} className="mt-4 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-md text-[13px] font-medium text-slate-700 shadow-sm transition">
+              Create Agent
+            </button>
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Agent</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden md:table-cell">Capabilities</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Memory</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Last Run</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredAgents.map((agent) => (
+                  <tr key={agent.id} className="hover:bg-slate-50 transition group">
+                    <td className="px-4 py-3 min-w-[200px] max-w-[300px]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                          <Bot className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-[13px] font-semibold text-slate-900 truncate">{agent.name}</h4>
+                          <p className="text-[11px] text-slate-500 truncate mt-0.5">{agent.purpose}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Active
                       </span>
-                    )}
-                    {spec.capabilities.files && (
-                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                        <FileText className="w-2.5 h-2.5" /> Files
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <div className="flex items-center flex-wrap gap-1">
+                        {agent.specification?.capabilities && Object.entries(agent.specification.capabilities).filter(([_, v]) => v).map(([k, _]) => (
+                           <span key={k} className="text-[10px] text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded capitalize">
+                             {k.replace('_', ' ')}
+                           </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      <span className="text-[12px] text-slate-600 capitalize">
+                        {agent.specification?.memory?.scope === 'none' ? 'None' : agent.specification?.memory?.optimization || 'Balanced'}
                       </span>
-                    )}
-                    {spec.capabilities.data_analysis && (
-                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                        <Calculator className="w-2.5 h-2.5" /> Data
-                      </span>
-                    )}
-                    {spec.capabilities.code_execution && (
-                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] bg-purple-500/10 text-purple-300 border border-purple-500/20">
-                        <Terminal className="w-2.5 h-2.5" /> Code
-                      </span>
-                    )}
-                    {spec.capabilities.database && (
-                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                        <Database className="w-2.5 h-2.5" /> DB
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Bottom Action Footer */}
-                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenAgent(agent);
-                    }}
-                    className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 font-semibold"
-                  >
-                    <Play className="w-3.5 h-3.5" />
-                    Open & Test
-                  </button>
-
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEditAgent(agent);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition"
-                      title="Edit Agent"
-                    >
-                      <Edit className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      onClick={(e) => handleDuplicate(agent, e)}
-                      disabled={duplicatingId === agent.id}
-                      className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition"
-                      title="Duplicate Agent"
-                    >
-                      {duplicatingId === agent.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-
-                    <button
-                      onClick={(e) => handleDownload(agent, e)}
-                      disabled={downloadingId === agent.id}
-                      className="p-1.5 text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded-lg transition"
-                      title="Download Code (.zip)"
-                    >
-                      {downloadingId === agent.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Download className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-
-                    <button
-                      onClick={(e) => handleDelete(agent, e)}
-                      disabled={deletingId === agent.id}
-                      className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
-                      title="Delete Agent"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                    </td>
+                    <td className="px-4 py-3 text-[12px] text-slate-500">
+                      12m ago
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => onOpenAgent(agent)} className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-[12px] font-medium rounded-md transition shadow-sm mr-2">
+                          Open
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); onEditAgent(agent); }} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-md transition" title="Edit">
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={(e) => handleDuplicate(agent, e)} disabled={duplicatingId === agent.id} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-md transition" title="Duplicate">
+                          {duplicatingId === agent.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                        <button onClick={(e) => handleDownload(agent, e)} disabled={downloadingId === agent.id} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-md transition" title="Download Code">
+                          {downloadingId === agent.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        </button>
+                        <button onClick={(e) => handleDelete(agent, e)} disabled={deletingId === agent.id} className="p-1.5 text-slate-400 hover:text-rose-600 rounded-md transition" title="Delete">
+                          {deletingId === agent.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
