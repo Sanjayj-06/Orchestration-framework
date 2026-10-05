@@ -25,7 +25,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
         <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Good morning 👋
+              Good morning
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               Build and manage your AI agents.
@@ -116,7 +116,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
                     <div className="flex items-center gap-4 sm:flex-col sm:items-end sm:gap-1 shrink-0">
                       <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
                         <Clock className="w-3 h-3" />
-                        12 mins ago
+                        {agent.updated_at ? new Date(agent.updated_at).toLocaleDateString() : 'Recently'}
                       </div>
                       <button 
                         onClick={() => onOpenAgent(agent)}
@@ -136,35 +136,23 @@ export const LandingView: React.FC<LandingViewProps> = ({
         <section>
           <h2 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Recent Activity</h2>
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-2">
-             <div className="flex items-center gap-3 p-3 hover:bg-slate-50 transition rounded-md">
-               <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
-                 <Play className="w-3 h-3" />
-               </div>
-               <div className="flex-1 text-sm text-slate-700">
-                 <span className="font-semibold text-slate-900">Research Assistant</span> completed a run
-               </div>
-               <div className="text-[11px] text-slate-400 shrink-0">12 mins ago</div>
-             </div>
-             
-             <div className="flex items-center gap-3 p-3 hover:bg-slate-50 transition rounded-md">
-               <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
-                 <LayoutGrid className="w-3 h-3" />
-               </div>
-               <div className="flex-1 text-sm text-slate-700">
-                 <span className="font-semibold text-slate-900">Coding Assistant</span> was updated
-               </div>
-               <div className="text-[11px] text-slate-400 shrink-0">2 hours ago</div>
-             </div>
-             
-             <div className="flex items-center gap-3 p-3 hover:bg-slate-50 transition rounded-md">
-               <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
-                 <Plus className="w-3 h-3" />
-               </div>
-               <div className="flex-1 text-sm text-slate-700">
-                 <span className="font-semibold text-slate-900">Jarvis</span> was created
-               </div>
-               <div className="text-[11px] text-slate-400 shrink-0">Yesterday</div>
-             </div>
+            {agents.length === 0 ? (
+              <div className="p-4 text-center text-sm text-slate-500">No recent activity</div>
+            ) : (
+              agents.slice(0, 3).map((agent) => (
+                <div key={agent.id + '_activity'} className="flex items-center gap-3 p-3 hover:bg-slate-50 transition rounded-md">
+                  <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
+                    <LayoutGrid className="w-3 h-3" />
+                  </div>
+                  <div className="flex-1 text-sm text-slate-700">
+                    <span className="font-semibold text-slate-900">{agent.name}</span> was updated
+                  </div>
+                  <div className="text-[11px] text-slate-400 shrink-0">
+                    {agent.updated_at ? new Date(agent.updated_at).toLocaleDateString() : 'Recently'}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </section>
 

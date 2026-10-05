@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import {
-  Plus, Edit, Copy, Download, Trash2, Search, Loader2, CheckCircle2, Bot
+  Plus, Edit, Copy, Download, Trash2, Search, Loader2, CheckCircle2, Bot, PowerOff, Power
 } from 'lucide-react';
 import type { Agent } from '../types/agent';
-import { downloadAgentCode, duplicateAgent, deleteAgent } from '../services/api';
+import { downloadAgentCode, duplicateAgent, deleteAgent, updateAgent } from '../services/api';
 
 interface AgentLibraryViewProps {
   agents: Agent[];
@@ -26,6 +26,14 @@ export const AgentLibraryView: React.FC<AgentLibraryViewProps> = ({
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText: string;
+    confirmColor: string;
+  } | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -34,9 +42,10 @@ export const AgentLibraryView: React.FC<AgentLibraryViewProps> = ({
 
   const filteredAgents = agents.filter(
     (a) =>
-      a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (activeTab === 'all' || a.status === activeTab) &&
+      (a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.purpose.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.description.toLowerCase().includes(searchQuery.toLowerCase())
+      a.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleDownload = async (agent: Agent, e: React.MouseEvent) => {
@@ -66,23 +75,87 @@ export const AgentLibraryView: React.FC<AgentLibraryViewProps> = ({
     }
   };
 
-  const handleDelete = async (agent: Agent, e: React.MouseEvent) => {
+  const handleDeactivate = (agent: Agent, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to delete "${agent.name}"?`)) return;
-    setDeletingId(agent.id);
+    setConfirmAction({
+      isOpen: true,
+      title: 'Deactivate Agent',
+      message: `Are you sure you want to deactivate "${agent.name}"?`,
+      confirmText: 'Deactivate',
+      confirmColor: 'bg-amber-600 hover:bg-amber-700',
+      onConfirm: async () => {
+        try {
+          await updateAgent(agent.id, { status: 'archived' });
+          showToast(`Deactivated "${agent.name}".`);
+          onRefresh();
+        } catch {
+          showToast('Could not deactivate agent.');
+        }
+        setConfirmAction(null);
+      }
+    });
+  };
+
+  const handleActivate = async (agent: Agent, e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
-      await deleteAgent(agent.id);
-      showToast(`Deleted "${agent.name}".`);
+      await updateAgent(agent.id, { status: 'active' });
+      showToast(`Activated "${agent.name}".`);
       onRefresh();
     } catch {
-      showToast('Could not delete agent.');
-    } finally {
-      setDeletingId(null);
+      showToast('Could not activate agent.');
     }
+  };
+
+  const handleDelete = (agent: Agent, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConfirmAction({
+      isOpen: true,
+      title: 'Delete Agent',
+      message: `Are you sure you want to delete "${agent.name}"? This action cannot be undone.`,
+      confirmText: 'Delete',
+      confirmColor: 'bg-rose-600 hover:bg-rose-700',
+      onConfirm: async () => {
+        setDeletingId(agent.id);
+        try {
+          await deleteAgent(agent.id);
+          showToast(`Deleted "${agent.name}".`);
+          onRefresh();
+        } catch {
+          showToast('Could not delete agent.');
+        } finally {
+          setDeletingId(null);
+          setConfirmAction(null);
+        }
+      }
+    });
   };
 
   return (
     <div className="w-full flex flex-col h-full bg-slate-50">
+      {/* Confirm Modal */}
+      {confirmAction && confirmAction.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 transform transition-all scale-100">
+            <h3 className="text-lg font-semibold text-slate-900">{confirmAction.title}</h3>
+            <p className="mt-2 text-sm text-slate-500">{confirmAction.message}</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmAction(null)}
+                className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-md text-sm font-medium text-slate-700 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAction.onConfirm}
+                className={`px-4 py-2 text-white rounded-md text-sm font-medium transition ${confirmAction.confirmColor}`}
+              >
+                {confirmAction.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-20 right-8 z-50 px-4 py-2.5 rounded-md bg-slate-900 text-white text-xs font-medium shadow-lg flex items-center gap-2 animate-fadeIn">
@@ -130,7 +203,7 @@ export const AgentLibraryView: React.FC<AgentLibraryViewProps> = ({
 
       <div className="flex-1 overflow-y-auto px-8 py-6 custom-scrollbar max-w-6xl w-full mx-auto">
         <div className="flex items-center gap-6 border-b border-slate-200 mb-6">
-          {(['all', 'active', 'drafts', 'archived'] as const).map(tab => (
+          {(['all', 'active'] as const).map(tab => (
             <button 
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -181,10 +254,17 @@ export const AgentLibraryView: React.FC<AgentLibraryViewProps> = ({
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-medium">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Active
-                      </span>
+                      {agent.status === 'active' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200 text-[11px] font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                          Inactive
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
                       <div className="flex items-center flex-wrap gap-1">
@@ -201,7 +281,7 @@ export const AgentLibraryView: React.FC<AgentLibraryViewProps> = ({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-[12px] text-slate-500">
-                      12m ago
+                      {agent.updated_at ? new Date(agent.updated_at).toLocaleDateString() : 'Recently'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -217,6 +297,15 @@ export const AgentLibraryView: React.FC<AgentLibraryViewProps> = ({
                         <button onClick={(e) => handleDownload(agent, e)} disabled={downloadingId === agent.id} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-md transition" title="Download Code">
                           {downloadingId === agent.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                         </button>
+                        {agent.status === 'active' ? (
+                          <button onClick={(e) => handleDeactivate(agent, e)} className="p-1.5 text-slate-400 hover:text-amber-600 rounded-md transition" title="Deactivate">
+                            <PowerOff className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <button onClick={(e) => handleActivate(agent, e)} className="p-1.5 text-slate-400 hover:text-emerald-600 rounded-md transition" title="Activate">
+                            <Power className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button onClick={(e) => handleDelete(agent, e)} disabled={deletingId === agent.id} className="p-1.5 text-slate-400 hover:text-rose-600 rounded-md transition" title="Delete">
                           {deletingId === agent.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                         </button>
