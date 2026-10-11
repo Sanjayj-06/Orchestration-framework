@@ -1,4 +1,4 @@
-﻿import os
+import os
 import json
 import re
 from typing import Optional, List, Dict, Any
@@ -29,13 +29,20 @@ except ImportError:
     )
 
 def analyze_user_requirement(requirement: str, preferred_name: Optional[str] = None) -> RequirementAnalysisResponse:
+    from dotenv import load_dotenv
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+    load_dotenv(dotenv_path=env_path)
+    
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
     
-    # If OpenAI API Key is present, attempt LLM-based analysis
-    if openai_key:
+    # If Gemini API Key is present, attempt LLM-based analysis
+    if gemini_key:
         try:
-            import openai
-            client = openai.OpenAI(api_key=openai_key)
+            from google import genai
+            from google.genai import types
+
+            client = genai.Client(api_key=gemini_key)
             prompt = f"""
 You are an expert AI system architect.
 A non-technical user wants to build an AI agent with this simple requirement:
@@ -78,15 +85,14 @@ Convert this requirement into a JSON object matching this schema:
   }},
   "suggested_sample_questions": ["question 1", "question 2", "question 3"]
 }}
-Return ONLY valid JSON.
+Return ONLY valid JSON without any markdown formatting block.
 """
-            completion = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                response_format={"type": "json_object"}
+            response = client.models.generate_content(
+                model='gemini-flash-latest',
+                contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json")
             )
-            raw_text = completion.choices[0].message.content
+            raw_text = (response.text or "").strip()
             parsed = json.loads(raw_text)
             
             name = preferred_name or parsed.get("name", "Custom AI Assistant")
@@ -130,6 +136,7 @@ Return ONLY valid JSON.
             )
             return RequirementAnalysisResponse(specification=spec, summary=summary)
         except Exception as e:
+            print("LLM Error:", str(e))
             # Fallback to intelligent rule-based synthesizer
             pass
 

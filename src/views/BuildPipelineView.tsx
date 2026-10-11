@@ -19,7 +19,8 @@ import { Sidebar } from '../components/Sidebar';
 import { NodeInspector } from '../components/NodeInspector';
 import { AgentNode, StartNode, OutputNode } from '../components/nodes/AgentNode';
 import type { Agent } from '../types/agent';
-import { Play, Save, CheckCircle2, Bot, Sparkles, X } from 'lucide-react';
+import { chatWithAgent } from '../services/api';
+import { Play, Save, CheckCircle2, AlertCircle, Bot, Sparkles, X, ChevronDown, ChevronRight } from 'lucide-react';
 
 interface BuildPipelineViewProps {
   agents?: Agent[];
@@ -38,6 +39,24 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
   const [runInput, setRunInput] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState<string | null>(null);
+  const [executionMode, setExecutionMode] = useState<'LOCAL_MOCK' | 'AI_RUNTIME'>('LOCAL_MOCK');
+  
+  type StepExecutionData = {
+    id: string;
+    name: string;
+    status: string;
+    input?: string;
+    output?: string;
+    duration?: number;
+    isExpanded?: boolean;
+    inputKeys?: string[];
+    agentId?: string;
+  };
+  const [executionSteps, setExecutionSteps] = useState<StepExecutionData[]>([]);
+
+  const toggleStepExpand = (stepId: string) => {
+    setExecutionSteps(prev => prev.map(s => s.id === stepId ? { ...s, isExpanded: !s.isExpanded } : s));
+  };
 
   const { screenToFlowPosition, deleteElements } = useReactFlow();
 
@@ -90,11 +109,22 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
         });
 
         const id = `node_${Date.now()}`;
+        let defaultData = { ...data, status: 'idle' };
+        if (type === 'startNode') {
+          defaultData.inputContract = {
+            name: 'Research Topic',
+            type: 'text',
+            required: true,
+            description: '',
+            example: ''
+          };
+        }
+
         const newNode: Node = {
           id,
           type,
           position,
-          data: { ...data, status: 'idle' }
+          data: defaultData
         };
 
         setNodes((nds) => [...nds, newNode]);
@@ -116,6 +146,10 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
     [deleteElements, selectedNodeId]
   );
 
+  const updateNodeData = useCallback((nodeId: string, newData: any) => {
+    setNodes((nds) => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...newData } } : n));
+  }, [setNodes]);
+
   const handleSave = () => {
     // In a real app, this would save to the backend.
     alert('Pipeline saved successfully!');
@@ -128,30 +162,224 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
       return;
     }
     
-    const hasStart = nodes.some(n => n.type === 'startNode');
-    if (!hasStart) {
+    const startNode = nodes.find(n => n.type === 'startNode');
+    if (!startNode) {
       alert('Pipeline needs a "User Input" start node.');
       return;
     }
 
+    setRunInput((startNode.data.inputContract as any)?.example || '');
     setIsRunModalOpen(true);
     setExecutionResult(null);
   };
 
   const executePipeline = async () => {
     setIsExecuting(true);
+    setExecutionResult(null);
+    setExecutionSteps([]);
     
-    // Simulate execution step by step
-    const agentNodes = nodes.filter(n => n.type === 'agentNode');
-    
-    for (const node of agentNodes) {
-      setNodes(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, status: 'running' } } : n));
-      await new Promise(r => setTimeout(r, 1500)); // fake delay
-      setNodes(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, status: 'success' } } : n));
+    const startNode = nodes.find(n => n.type === 'startNode');
+    if (!startNode) {
+      alert("Pipeline needs a User Input start node.");
+      setIsExecuting(false);
+      return;
+    }
+
+    // reset all statuses to idle
+    setNodes(nds => nds.map(n => ({ ...n, data: { ...n.data, status: 'idle' } })));
+
+    const executionContext: {
+      originalInput: string;
+      nodeResults: Record<string, { output: string; name: string }>;
+    } = {
+      originalInput: runInput,
+      nodeResults: {}
+    };
+
+    let currentNode: Node | null = startNode;
+    let currentSteps: StepExecutionData[] = [];
+
+    while (currentNode) {
+      const nodeId: string = currentNode.id;
+      const nodeName = currentNode.type === 'startNode' ? 'User Input' 
+        : currentNode.type === 'outputNode' ? 'Final Output' 
+        : (currentNode.data.agent as Agent)?.name || 'Agent';
+        
+      const agent = currentNode.type === 'agentNode' ? currentNode.data.agent as Agent : null;
+
+      let stepInputString = "";
+      let inputObj: any = {};
+      let inputKeys: string[] = [];
+
+      if (currentNode.type === 'startNode') {
+        stepInputString = executionContext.originalInput;
+      } else if (currentNode.type === 'outputNode') {
+        // Output node takes the last agent's output
+        const lastNodeId = Object.keys(executionContext.nodeResults).pop();
+        stepInputString = lastNodeId ? executionContext.nodeResults[lastNodeId].output : "";
+      } else if (agent) {
+        const lowerName = agent.name.toLowerCase();
+        inputObj.originalQuestion = executionContext.originalInput;
+        inputKeys.push("originalQuestion");
+
+        if (lowerName.includes("fact")) {
+          const resNodeId = Object.keys(executionContext.nodeResults).find(k => executionContext.nodeResults[k].name.toLowerCase().includes("research"));
+          if (resNodeId) {
+            inputObj.researchFindings = executionContext.nodeResults[resNodeId].output;
+            inputKeys.push("researchFindings");
+          }
+        } else if (lowerName.includes("compar")) {
+          const factNodeId = Object.keys(executionContext.nodeResults).find(k => executionContext.nodeResults[k].name.toLowerCase().includes("fact"));
+          if (factNodeId) {
+             inputObj.verifiedFindings = executionContext.nodeResults[factNodeId].output;
+             inputKeys.push("verifiedFindings");
+          }
+        } else if (lowerName.includes("summary")) {
+          const compNodeId = Object.keys(executionContext.nodeResults).find(k => executionContext.nodeResults[k].name.toLowerCase().includes("compar"));
+          if (compNodeId) {
+             inputObj.comparison = executionContext.nodeResults[compNodeId].output;
+             inputKeys.push("comparison");
+          }
+        } else if (lowerName.includes("report")) {
+          const resNodeId = Object.keys(executionContext.nodeResults).find(k => executionContext.nodeResults[k].name.toLowerCase().includes("research"));
+          if (resNodeId) { inputObj.researchFindings = executionContext.nodeResults[resNodeId].output; inputKeys.push("researchFindings"); }
+          
+          const factNodeId = Object.keys(executionContext.nodeResults).find(k => executionContext.nodeResults[k].name.toLowerCase().includes("fact"));
+          if (factNodeId) { inputObj.verifiedFindings = executionContext.nodeResults[factNodeId].output; inputKeys.push("verifiedFindings"); }
+          
+          const compNodeId = Object.keys(executionContext.nodeResults).find(k => executionContext.nodeResults[k].name.toLowerCase().includes("compar"));
+          if (compNodeId) { inputObj.comparison = executionContext.nodeResults[compNodeId].output; inputKeys.push("comparison"); }
+          
+          const sumNodeId = Object.keys(executionContext.nodeResults).find(k => executionContext.nodeResults[k].name.toLowerCase().includes("summary"));
+          if (sumNodeId) { inputObj.summary = executionContext.nodeResults[sumNodeId].output; inputKeys.push("summary"); }
+        } else if (!lowerName.includes("research")) {
+           const prevNodeId = Object.keys(executionContext.nodeResults).pop();
+           if (prevNodeId) {
+             inputObj.previousOutput = executionContext.nodeResults[prevNodeId].output;
+             inputKeys.push("previousOutput");
+           }
+        }
+        stepInputString = JSON.stringify(inputObj, null, 2);
+      }
+
+      // Recursion Detection
+      let possibleRecursion = false;
+      for (const key in executionContext.nodeResults) {
+        const pastOut = executionContext.nodeResults[key].output;
+        if (pastOut && pastOut.length > 30) {
+          const count = stepInputString.split(pastOut).length - 1;
+          if (count > 2) {
+            possibleRecursion = true;
+            break;
+          }
+        }
+      }
+
+      if (possibleRecursion) {
+        setExecutionResult(`Pipeline stopped: possible recursive context detected at node ${nodeName}.`);
+        setIsExecuting(false);
+        break;
+      }
+      
+      const newStep: StepExecutionData = { 
+        id: nodeId, 
+        name: nodeName, 
+        status: 'running', 
+        input: stepInputString, 
+        isExpanded: false,
+        inputKeys,
+        agentId: agent?.id
+      };
+      currentSteps.push(newStep);
+      setExecutionSteps([...currentSteps]);
+      
+      setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status: 'running' } } : n));
+      
+      const startTime = Date.now();
+      let nodeOutput = stepInputString;
+
+      if (agent) {
+        if (executionMode === 'AI_RUNTIME') {
+          try {
+            const response = await chatWithAgent(agent.id, stepInputString);
+            const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+            
+            const providerStr = agent.specification.model.provider === 'recommended' ? 'Auto (Configured Provider)' : agent.specification.model.provider;
+            
+            nodeOutput = `[Execution Mode: AI Runtime]
+[Provider: ${providerStr}]
+[Model: ${agent.specification.model.name}]
+[Status: Completed in ${duration}s]
+
+${response.response}`;
+          } catch (err: any) {
+            const errMsg = err.response?.data?.detail || err.message || 'Unknown error';
+            nodeOutput = `[ERROR] AI Runtime Execution failed:\n${errMsg}`;
+            
+            // Record failure in context, update UI, and abort pipeline
+            executionContext.nodeResults[nodeId] = { output: nodeOutput, name: nodeName };
+            setExecutionResult(`Pipeline stopped due to AI Runtime error at node ${nodeName}.\n\nError:\n${errMsg}`);
+            setIsExecuting(false);
+            
+            // Mark step as failed
+            const duration = (Date.now() - startTime) / 1000;
+            currentSteps = currentSteps.map(s => s.id === nodeId ? { ...s, status: 'failed', output: nodeOutput, duration } : s);
+            setExecutionSteps([...currentSteps]);
+            setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status: 'error' } } : n));
+            
+            break;
+          }
+        } else {
+          // Local Mock Execution Mode
+          await new Promise(r => setTimeout(r, 1000));
+          const purpose = agent.purpose || "general tasks";
+          const lowerName = agent.name.toLowerCase();
+          
+          let mockContent = "";
+          if (lowerName.includes("research")) {
+            mockContent = `[LOCAL MOCK]\nResearch findings generated for:\n${inputObj.originalQuestion || ''}`;
+          } else if (lowerName.includes("fact")) {
+            mockContent = `[LOCAL MOCK]\nFact-check result generated from:\n${inputObj.researchFindings ? inputObj.researchFindings.substring(0, 50) + '...' : ''}`;
+          } else if (lowerName.includes("compar")) {
+            mockContent = `[LOCAL MOCK]\nComparison generated from:\n${inputObj.verifiedFindings ? inputObj.verifiedFindings.substring(0, 50) + '...' : ''}`;
+          } else if (lowerName.includes("summary")) {
+            mockContent = `[LOCAL MOCK]\nSummary generated from:\n${inputObj.comparison ? inputObj.comparison.substring(0, 50) + '...' : ''}`;
+          } else if (lowerName.includes("report")) {
+            mockContent = `[LOCAL MOCK]\nFinal report generated for:\n${inputObj.originalQuestion || ''}`;
+          } else {
+            mockContent = `[LOCAL MOCK]\nProcessed based on purpose:\n${purpose}`;
+          }
+          nodeOutput = mockContent;
+        }
+        
+        executionContext.nodeResults[nodeId] = {
+          output: nodeOutput,
+          name: nodeName
+        };
+      } else {
+         await new Promise(r => setTimeout(r, 800)); 
+      }
+
+      const duration = (Date.now() - startTime) / 1000;
+      
+      currentSteps = currentSteps.map(s => s.id === nodeId ? { ...s, status: 'success', output: nodeOutput, duration } : s);
+      setExecutionSteps([...currentSteps]);
+      setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status: 'success' } } : n));
+
+      if (currentNode.type === 'outputNode') {
+        setExecutionResult(nodeOutput);
+        break;
+      }
+
+      const outEdge: Edge | undefined = edges.find(e => e.source === nodeId);
+      if (!outEdge) {
+        setExecutionResult(`Pipeline Execution Stopped (No further connections).\n\nLast Output:\n${nodeOutput}`);
+        break;
+      }
+
+      currentNode = nodes.find(n => n.id === outEdge.target) || null;
     }
     
-    await new Promise(r => setTimeout(r, 500));
-    setExecutionResult("This is a simulated final output generated by the pipeline agents based on your input: " + runInput);
     setIsExecuting(false);
   };
 
@@ -160,6 +388,7 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
     setIsRunModalOpen(false);
     setRunInput('');
     setExecutionResult(null);
+    setExecutionSteps([]);
   };
 
   const selectedNode = useMemo(() => {
@@ -279,6 +508,7 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
           edgesCount={edges.length}
           onClose={() => setSelectedNodeId(null)}
           onDeleteNode={handleDeleteNode}
+          updateNodeData={updateNodeData}
         />
       </div>
 
@@ -304,39 +534,136 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
             </div>
 
             <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
-              {!isExecuting && !executionResult ? (
-                <div className="space-y-4">
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Initial Input
-                  </label>
-                  <textarea
-                    rows={4}
-                    value={runInput}
-                    onChange={(e) => setRunInput(e.target.value)}
-                    placeholder="Enter the starting input for this pipeline..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition resize-none"
-                  />
+              {!isExecuting && !executionResult && executionSteps.length === 0 ? (
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-slate-700">
+                      Execution Mode
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setExecutionMode('LOCAL_MOCK')}
+                        className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1 ${
+                          executionMode === 'LOCAL_MOCK' 
+                            ? 'border-blue-500 bg-blue-50/50 text-blue-700 shadow-sm' 
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="font-bold text-sm">Local Mock</div>
+                        <div className="text-[10px] opacity-80">Safe, fast, simulated data</div>
+                      </button>
+                      <button
+                        onClick={() => setExecutionMode('AI_RUNTIME')}
+                        className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1 ${
+                          executionMode === 'AI_RUNTIME' 
+                            ? 'border-emerald-500 bg-emerald-50/50 text-emerald-700 shadow-sm' 
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="font-bold text-sm flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> AI Runtime</div>
+                        <div className="text-[10px] opacity-80">Live execution with real LLMs</div>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <label className="block text-sm font-semibold text-slate-700">
+                      Initial Input
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={runInput}
+                      onChange={(e) => setRunInput(e.target.value)}
+                      placeholder="Enter the starting input for this pipeline..."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition resize-none"
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-8">
+                  {/* Execution Mode Badge */}
+                  <div className="flex justify-center mb-6">
+                    <div className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border shadow-sm ${
+                      executionMode === 'LOCAL_MOCK' 
+                        ? 'bg-blue-50 border-blue-200 text-blue-700' 
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    }`}>
+                      Execution Mode: {executionMode === 'LOCAL_MOCK' ? 'LOCAL MOCK • NO REAL AI / WEB SEARCH' : 'AI RUNTIME'}
+                    </div>
+                  </div>
+
                   {/* Execution Steps */}
                   <div className="space-y-4">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Execution Steps</h4>
-                    <div className="space-y-3">
-                      {nodes.filter(n => n.type === 'agentNode').map((node, i) => {
-                        const agent = node.data.agent as Agent;
-                        const status = node.data.status as string;
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Execution Log</h4>
+                    <div className="space-y-3 relative">
+                      {/* Vertical connector line */}
+                      <div className="absolute left-[11px] top-4 bottom-4 w-0.5 bg-slate-100 z-0"></div>
+                      
+                      {executionSteps.map((step, i) => {
                         return (
-                          <div key={node.id} className="flex items-center gap-4">
-                            <div className="w-6 h-6 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500 shrink-0">
-                              {i + 1}
+                          <div key={`${step.id}-${i}`} className="flex flex-col relative z-10 w-full mb-3">
+                            <div className="flex items-center gap-4">
+                              <div className="w-6 h-6 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center shrink-0 z-10">
+                                 {step.status === 'success' ? <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div> : 
+                                  step.status === 'running' ? <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping"></div> :
+                                  step.status === 'failed' ? <div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div> :
+                                  <div className="w-2 h-2 rounded-full bg-slate-300"></div>}
+                              </div>
+                              <div 
+                                onClick={() => (step.status === 'success' || step.status === 'failed') && toggleStepExpand(step.id)} 
+                                className={`flex-1 bg-white border ${step.status === 'failed' ? 'border-rose-300 bg-rose-50/20' : step.isExpanded ? 'border-blue-400 ring-1 ring-blue-400/20' : 'border-slate-200'} p-3 rounded-lg flex items-center justify-between shadow-sm ${(step.status === 'success' || step.status === 'failed') ? 'cursor-pointer hover:border-slate-300' : ''} transition`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {(step.status === 'success' || step.status === 'failed') && (step.isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />)}
+                                  <span className="text-sm font-semibold text-slate-800">{step.name}</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  {step.output && step.input && step.output.length > step.input.length * 3 && step.output.length > 500 && (
+                                    <span className="text-[10px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">⚠️ Large Output</span>
+                                  )}
+                                  {step.duration !== undefined && <span className="text-[11px] text-slate-400 font-mono">{step.duration.toFixed(1)}s</span>}
+                                  {step.status === 'running' && <span className="text-xs font-bold text-blue-500 uppercase">Running</span>}
+                                  {step.status === 'success' && <span className="text-xs font-bold text-emerald-500 uppercase flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5"/> Completed</span>}
+                                  {step.status === 'failed' && <span className="text-xs font-bold text-rose-500 uppercase flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5"/> Failed</span>}
+                                  {step.status === 'idle' && <span className="text-xs font-bold text-slate-400 uppercase">Waiting</span>}
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex-1 bg-white border border-slate-200 p-3 rounded-lg flex items-center justify-between">
-                              <span className="text-sm font-semibold text-slate-800">{agent?.name || 'Agent'}</span>
-                              {status === 'running' && <div className="w-4 h-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />}
-                              {status === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-                              {status === 'idle' && <span className="w-2 h-2 rounded-full bg-slate-200"></span>}
-                            </div>
+                            
+                            {step.isExpanded && (
+                              <div className="ml-10 mt-2 p-4 bg-slate-50 border border-slate-200 rounded-lg text-[13px] space-y-4 animate-fadeIn">
+                                {step.inputKeys && step.inputKeys.length > 0 && (
+                                  <div>
+                                    <h5 className="font-bold text-slate-500 text-[10px] uppercase tracking-wider mb-1.5">INPUT KEYS</h5>
+                                    <div className="text-slate-700 font-mono text-[11px] mb-4">
+                                      {JSON.stringify(step.inputKeys)}
+                                    </div>
+                                  </div>
+                                )}
+                                <div>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <h5 className="font-bold text-slate-500 text-[10px] uppercase tracking-wider">INPUT</h5>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      {step.input ? step.input.length : 0} chars
+                                    </span>
+                                  </div>
+                                  <div className="text-slate-700 bg-white p-2.5 rounded border border-slate-100 whitespace-pre-wrap font-mono text-[11px] max-h-32 overflow-y-auto custom-scrollbar shadow-sm">
+                                    {step.input || 'No input'}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <h5 className="font-bold text-slate-500 text-[10px] uppercase tracking-wider">OUTPUT</h5>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      {step.output ? step.output.length : 0} chars
+                                    </span>
+                                  </div>
+                                  <div className="text-slate-800 bg-white p-2.5 rounded border border-slate-100 whitespace-pre-wrap font-mono text-[11px] max-h-48 overflow-y-auto custom-scrollbar shadow-sm">
+                                    {step.output || 'No output'}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}

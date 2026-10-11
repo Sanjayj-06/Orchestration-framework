@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   Agent,
   AgentSpecification,
   RequirementAnalysisResponse,
@@ -109,10 +109,21 @@ export async function downloadAgentCode(agentId: string, agentName: string): Pro
 }
 
 export async function chatWithAgent(agentId: string, message: string, sessionId?: string): Promise<ChatResponse> {
+  let apiKeys = undefined;
+  let models = undefined;
+  try {
+    const keysStr = localStorage.getItem('agentcraft_api_keys');
+    if (keysStr) apiKeys = JSON.parse(keysStr);
+    const modelsStr = localStorage.getItem('agentcraft_models');
+    if (modelsStr) models = JSON.parse(modelsStr);
+  } catch (e) {
+    console.warn("Failed to load settings from localStorage");
+  }
+
   const res = await fetch(`${API_BASE}/agents/${agentId}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId })
+    body: JSON.stringify({ message, session_id: sessionId, api_keys: apiKeys, models })
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'The AI assistant is temporarily busy.' }));
@@ -149,4 +160,13 @@ export async function runWorkflow(workflowId: string, input: string): Promise<an
   });
   if (!res.ok) throw new Error('Workflow execution failed');
   return res.json();
+}
+
+export async function testProviderConnection(provider: string, apiKey: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/agents/providers/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, api_key: apiKey })
+  });
+  return res.ok;
 }

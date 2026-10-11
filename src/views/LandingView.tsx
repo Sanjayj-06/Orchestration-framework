@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, LayoutGrid, Clock, CheckCircle2, Play } from 'lucide-react';
+import { Plus, LayoutGrid, Clock, CheckCircle2 } from 'lucide-react';
 import type { Agent } from '../types/agent';
 
 interface LandingViewProps {

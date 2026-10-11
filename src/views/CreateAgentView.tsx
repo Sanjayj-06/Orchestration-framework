@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, ArrowRight, ArrowLeft, CheckCircle2, Check, AlertCircle, Loader2, Globe, FileText, Calculator, Terminal, Link, Bot } from 'lucide-react';
-import type { AgentSpecification, WorkingStyle, AutonomyLevel, MemoryScope, AgentCapabilities } from '../types/agent';
+import { ArrowRight, ArrowLeft, CheckCircle2, Check, AlertCircle, Loader2, Globe, FileText, Calculator, Terminal, Link, Bot } from 'lucide-react';
+import type { AgentSpecification, WorkingStyle, AutonomyLevel, MemoryScope, AgentCapabilities, ModelProvider, OutputFormat } from '../types/agent';
 import { analyzeRequirement, createAgent, updateAgent } from '../services/api';
 
 interface CreateAgentViewProps {
@@ -29,9 +29,101 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
 }) => {
   const [step, setStep] = useState<number>(existingSpec ? 3 : 1);
   const [requirement, setRequirement] = useState(initialPrompt);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState<'idle' | 'analyzing' | 'success' | 'fallback'>('idle');
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isDone, setIsDone] = useState(false);
+
+  // Timing states
+  const [creationTimers, setCreationTimers] = useState({
+    start: Date.now(),
+    analysisDone: 0,
+    configDone: 0,
+    validationDone: 0,
+  });
+
+  const fallbackAnalyzeRequirement = (req: string, name?: string): AgentSpecification => {
+    const reqLower = req.toLowerCase();
+    
+    const caps: AgentCapabilities = {
+      web_search: false,
+      files: false,
+      data_analysis: false,
+      code_execution: false,
+      database: false,
+      apis: false,
+      other_agents: false
+    };
+
+    const tasks: string[] = ["Understand the user's goals", "Execute requested workflows"];
+    let purpose = "Provide expert assistance based on user requirements.";
+
+    if (/(research|find information|papers|sources|search|report)/.test(reqLower)) {
+      caps.web_search = true;
+      tasks.push("Search the web for relevant information");
+      tasks.push("Collect and organize sources");
+      purpose = "Research topics and find relevant information.";
+    }
+    if (/(excel|csv|dataset|data)/.test(reqLower)) {
+      caps.data_analysis = true;
+      caps.files = true;
+      tasks.push("Analyze datasets and structured data");
+      tasks.push("Generate insights and reports");
+      purpose = "Analyze tabular data and generate insights.";
+    }
+    if (/(pdf|document|file)/.test(reqLower)) {
+      caps.files = true;
+      tasks.push("Read and process documents");
+      tasks.push("Extract information from files");
+    }
+    if (/(code|programming|debug)/.test(reqLower)) {
+      caps.code_execution = true;
+      tasks.push("Analyze and debug code");
+      tasks.push("Write and execute scripts");
+      purpose = "Assist with programming and debugging.";
+    }
+
+    if (!caps.web_search && !caps.files && !caps.data_analysis && !caps.code_execution) {
+      caps.web_search = true;
+    }
+
+    const activeTools = (Object.keys(caps) as (keyof AgentCapabilities)[])
+      .filter((k) => caps[k])
+      .map((k) => {
+        const toolMap: Record<keyof AgentCapabilities, string> = {
+          web_search: 'web_search',
+          files: 'file_processing',
+          data_analysis: 'data_analysis',
+          code_execution: 'code_execution',
+          database: 'database',
+          apis: 'apis',
+          other_agents: 'other_agents'
+        };
+        return toolMap[k];
+      });
+
+    return {
+      name: name || "Custom Assistant",
+      purpose,
+      description: `An assistant created to help with: ${req}`,
+      tasks,
+      behavior: { style: 'detailed', autonomy: 'guided' },
+      capabilities: caps,
+      tools: activeTools,
+      memory: { enabled: true, scope: 'across_conversations', optimization: 'balanced' },
+      model: { provider: 'recommended', name: 'auto', temperature: 0.5, max_tokens: 2048 },
+      output: { format: 'normal', custom_instruction: '' },
+      advanced: {
+        system_prompt: `You are a ${name || "Custom Assistant"}. Your purpose is to ${purpose}. Perform tasks carefully and avoid unsupported claims.`,
+        context_window: 8000,
+        retry_attempts: 3,
+        tool_timeout_seconds: 30,
+        error_handling: 'graceful'
+      },
+      inputs: ["Task requirements"],
+      outputs: ["Text response"]
+    };
+  };
 
   const [spec, setSpec] = useState<AgentSpecification>(() => {
     if (existingSpec) return existingSpec;
@@ -55,14 +147,18 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
       model: { provider: 'recommended', name: 'auto', temperature: 0.5, max_tokens: 2048 },
       output: { format: 'normal', custom_instruction: '' },
       advanced: {
-        system_prompt: '',
+        system_prompt: 'You are a helpful AI assistant.',
         context_window: 8000,
         retry_attempts: 3,
         tool_timeout_seconds: 30,
         error_handling: 'graceful'
-      }
+      },
+      inputs: ["Query"],
+      outputs: ["Response"]
     };
   });
+  
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // _summary is removed
 
@@ -74,19 +170,24 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
 
   const handleAnalyzeRequirement = async () => {
     if (!requirement.trim()) {
-      setErrorMessage('Please describe what you want your AI assistant to do.');
+      setAnalysisError('Please describe what you want your AI assistant to do.');
       return;
     }
-    setErrorMessage(null);
-    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysisStatus('analyzing');
     try {
       const res = await analyzeRequirement(requirement.trim(), undefined);
       setSpec(res.specification);
+      setAnalysisStatus('success');
       setStep(2);
+      setCreationTimers(prev => ({ ...prev, analysisDone: Date.now() }));
     } catch (err: any) {
-      setErrorMessage(err.message || 'The AI service is temporarily busy. Please try again.');
-    } finally {
-      setIsAnalyzing(false);
+      console.warn("AI analysis failed, using fallback:", err);
+      setAnalysisStatus('fallback');
+      const fallbackSpec = fallbackAnalyzeRequirement(requirement.trim());
+      setSpec(fallbackSpec);
+      setStep(2);
+      setCreationTimers(prev => ({ ...prev, analysisDone: Date.now() }));
     }
   };
 
@@ -108,10 +209,27 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
   };
 
   const handleCreateAgent = async () => {
-    setStep(7);
+    if (isSaving || isDone) return; // Prevent duplicate creation requests
+    
+    setCreationTimers(prev => ({ ...prev, configDone: Date.now() }));
+    setStep(8);
     setIsSaving(true);
-    setErrorMessage(null);
+    setAnalysisError(null);
+    
+    // Simulate validation step
+    const validationStart = Date.now();
+    if (!spec.name) {
+      setAnalysisError('Agent name is required.');
+      setStep(7);
+      setIsSaving(false);
+      return;
+    }
+    const validationEnd = Date.now();
+    setCreationTimers(prev => ({ ...prev, validationDone: validationEnd }));
+
+    const persistenceStart = Date.now();
     try {
+      let resultId;
       if (editingAgentId) {
         const updated = await updateAgent(editingAgentId, {
           name: spec.name,
@@ -119,25 +237,41 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
           description: spec.description,
           specification: spec
         });
-        onAgentCreated(updated.id);
+        resultId = updated.id;
       } else {
         const created = await createAgent(spec, spec.name);
-        onAgentCreated(created.id);
+        resultId = created.id;
       }
+      
+      const persistenceEnd = Date.now();
+      setIsSaving(false);
+      setIsDone(true);
+
+      // Log timings
+      console.log(`[Agent Creation] Requirement analysis: ${creationTimers.analysisDone ? creationTimers.analysisDone - creationTimers.start : 0} ms`);
+      console.log(`[Agent Creation] Configuration: ${validationStart - (creationTimers.analysisDone || creationTimers.start)} ms`);
+      console.log(`[Agent Creation] Validation: ${validationEnd - validationStart} ms`);
+      console.log(`[Agent Creation] Persistence: ${persistenceEnd - persistenceStart} ms`);
+      console.log(`[Agent Creation] Total: ${persistenceEnd - creationTimers.start} ms`);
+      
+      // Delay to show success screen briefly before redirecting
+      setTimeout(() => {
+        onAgentCreated(resultId);
+      }, 1500);
+
     } catch (err: any) {
-      setErrorMessage(err.message || 'Could not save the agent. Please try again.');
-      setStep(6);
-    } finally {
+      setAnalysisError(err.message || 'Could not save the agent. Please try again.');
+      setStep(7);
       setIsSaving(false);
     }
   };
 
   const StepIndicator = () => (
     <div className="flex items-center justify-center gap-2 mb-8">
-      {[1, 2, 3, 4, 5, 6].map((i) => (
+      {[1, 2, 3, 4, 5, 6, 7].map((i) => (
         <div key={i} className="flex items-center gap-2">
           <div className={`w-2.5 h-2.5 rounded-full ${step >= i ? 'bg-blue-600' : 'bg-slate-200'}`} />
-          {i < 6 && <div className={`w-6 h-px ${step > i ? 'bg-blue-600' : 'bg-slate-200'}`} />}
+          {i < 7 && <div className={`w-6 h-px ${step > i ? 'bg-blue-600' : 'bg-slate-200'}`} />}
         </div>
       ))}
     </div>
@@ -146,12 +280,19 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
   return (
     <div className="w-full flex flex-col h-full bg-slate-50 overflow-y-auto custom-scrollbar items-center py-12 px-6">
       <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-sm p-8 sm:p-10 relative">
-        {step < 7 && <StepIndicator />}
+        {step < 8 && <StepIndicator />}
 
-        {errorMessage && step !== 7 && (
+        {analysisError && step !== 8 && (
           <div className="mb-6 p-4 rounded-md bg-rose-50 border border-rose-200 flex items-center gap-3 text-rose-700 text-[13px]">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
-            <span>{errorMessage}</span>
+            <span>{analysisError}</span>
+          </div>
+        )}
+
+        {analysisStatus === 'fallback' && step !== 8 && (
+          <div className="mb-6 p-4 rounded-md bg-amber-50 border border-amber-200 flex items-center gap-3 text-amber-700 text-[13px]">
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-500" />
+            <span>AI analysis unavailable. We've created a basic configuration from your description. You can review and edit it.</span>
           </div>
         )}
 
@@ -186,8 +327,8 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
 
             <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
               <button onClick={onCancel} className="px-4 py-2 text-[13px] font-medium text-slate-500 hover:text-slate-900 transition">Cancel</button>
-              <button onClick={handleAnalyzeRequirement} disabled={isAnalyzing} className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[14px] font-medium transition disabled:opacity-70 shadow-sm">
-                {isAnalyzing ? <><Loader2 className="w-4 h-4 animate-spin" /> Understanding...</> : <>Continue <ArrowRight className="w-4 h-4" /></>}
+              <button onClick={handleAnalyzeRequirement} disabled={analysisStatus === 'analyzing'} className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[14px] font-medium transition disabled:opacity-70 shadow-sm">
+                {analysisStatus === 'analyzing' ? <><Loader2 className="w-4 h-4 animate-spin" /> Understanding...</> : <>Continue <ArrowRight className="w-4 h-4" /></>}
               </button>
             </div>
           </div>
@@ -238,7 +379,7 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
             </div>
 
             <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
-              <button onClick={() => setStep(1)} className="px-4 py-2 text-[13px] font-medium text-slate-500 hover:text-slate-900 transition">Edit</button>
+              <button onClick={() => { setStep(1); setAnalysisStatus('idle'); setAnalysisError(null); }} className="px-4 py-2 text-[13px] font-medium text-slate-500 hover:text-slate-900 transition">Edit</button>
               <button onClick={() => setStep(3)} className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[14px] font-medium transition shadow-sm">
                 Looks Good <ArrowRight className="w-4 h-4" />
               </button>
@@ -405,8 +546,101 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
           </div>
         )}
 
-        {/* STEP 6: Review */}
+        {/* STEP 6: Model & I/O */}
         {step === 6 && (
+          <div className="animate-fadeIn space-y-6">
+            <div className="text-center mb-6">
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Model and Output Format</h1>
+              <p className="mt-2 text-[14px] text-slate-500">Fine-tune the intelligence driving your agent.</p>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-[14px] font-bold text-slate-900 mb-2">Provider & Model</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <select 
+                    value={spec.model.provider}
+                    onChange={(e) => setSpec({...spec, model: {...spec.model, provider: e.target.value as ModelProvider}})}
+                    className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-[14px] font-medium"
+                  >
+                    <option value="openai">OpenAI</option>
+                    <option value="gemini">Google Gemini</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="recommended">Recommended (Auto)</option>
+                  </select>
+                  <select 
+                    value={spec.model.name}
+                    onChange={(e) => setSpec({...spec, model: {...spec.model, name: e.target.value}})}
+                    className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-[14px] font-medium"
+                  >
+                    <option value="auto">Auto Select</option>
+                    <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recommended)</option>
+                    <option value="gemini-flash-latest">Gemini Flash (Latest)</option>
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="gpt-4o-mini">GPT-4o-mini</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[14px] font-bold text-slate-900 mb-2">Output Format</label>
+                <select 
+                  value={spec.output.format}
+                  onChange={(e) => setSpec({...spec, output: {...spec.output, format: e.target.value as OutputFormat}})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-[14px] font-medium"
+                >
+                  <option value="normal">Normal Text</option>
+                  <option value="markdown">Markdown Document</option>
+                  <option value="json">JSON Data</option>
+                  <option value="table">Table</option>
+                  <option value="report">Detailed Report</option>
+                </select>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4">
+                <button 
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="text-[13px] font-bold text-blue-600 hover:text-blue-700 transition"
+                >
+                  {showAdvanced ? 'Hide Advanced Settings' : 'Show Advanced Settings'}
+                </button>
+
+                {showAdvanced && (
+                  <div className="mt-4 p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+                    <div>
+                      <label className="block text-[13px] font-bold text-slate-700 mb-2">Creativity (Temperature: {spec.model.temperature})</label>
+                      <input 
+                        type="range" min="0" max="1" step="0.1" 
+                        value={spec.model.temperature} 
+                        onChange={(e) => setSpec({...spec, model: {...spec.model, temperature: parseFloat(e.target.value)}})}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[13px] font-bold text-slate-700 mb-2">Advanced Instructions (Auto-generated)</label>
+                      <textarea
+                        value={spec.advanced.system_prompt}
+                        onChange={(e) => setSpec({...spec, advanced: {...spec.advanced, system_prompt: e.target.value}})}
+                        rows={4}
+                        className="w-full bg-white border border-slate-300 focus:border-blue-500 rounded-lg p-3 text-[13px] font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
+              <button onClick={() => setStep(5)} className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-slate-500 hover:text-slate-900 transition"><ArrowLeft className="w-4 h-4"/> Back</button>
+              <button onClick={() => setStep(7)} className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[14px] font-medium transition shadow-sm">
+                Review Agent <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 7: Review */}
+        {step === 7 && (
           <div className="animate-fadeIn space-y-6">
             <div className="text-center mb-6">
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Review your agent</h1>
@@ -447,7 +681,7 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
             </div>
 
             <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
-              <button onClick={() => setStep(5)} className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-slate-500 hover:text-slate-900 transition"><ArrowLeft className="w-4 h-4"/> Back</button>
+              <button onClick={() => setStep(6)} className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-slate-500 hover:text-slate-900 transition"><ArrowLeft className="w-4 h-4"/> Back</button>
               <button onClick={handleCreateAgent} disabled={isSaving} className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[14px] font-medium transition shadow-sm">
                 {isSaving && <Loader2 className="w-4 h-4 animate-spin" />} Create Agent
               </button>
@@ -455,33 +689,60 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
           </div>
         )}
 
-        {/* STEP 7: Creating State */}
-        {step === 7 && (
+        {/* STEP 8: Creating State */}
+        {step === 8 && (
           <div className="animate-fadeIn flex flex-col items-center justify-center py-10 space-y-6 text-center min-h-[300px]">
-             <div className="relative">
-                <div className="absolute inset-0 bg-blue-100 rounded-full animate-ping opacity-75"></div>
-                <div className="w-16 h-16 relative bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg">
-                   <Bot className="w-8 h-8 animate-pulse" />
-                </div>
-             </div>
-             
-             <div>
-               <h2 className="text-xl font-bold text-slate-900">Creating your agent...</h2>
-               <div className="mt-6 space-y-2 text-left w-64 mx-auto">
-                 <div className="flex items-center gap-3 text-[14px] text-slate-700">
-                   <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Understanding requirements
+             {isDone ? (
+               <>
+                 <div className="w-16 h-16 relative bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-lg animate-in zoom-in duration-300">
+                    <Check className="w-8 h-8" />
                  </div>
-                 <div className="flex items-center gap-3 text-[14px] text-slate-700">
-                   <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Configuring behaviour
+                 <div>
+                   <h2 className="text-2xl font-bold text-slate-900">Your agent is ready!</h2>
+                   <p className="mt-2 text-slate-500">Redirecting to Dashboard...</p>
                  </div>
-                 <div className="flex items-center gap-3 text-[14px] text-slate-700">
-                   <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Setting capabilities
+                 <div className="mt-6 space-y-2 text-left w-64 mx-auto">
+                   <div className="flex items-center gap-3 text-[14px] text-slate-700">
+                     <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Understanding requirements
+                   </div>
+                   <div className="flex items-center gap-3 text-[14px] text-slate-700">
+                     <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Configuring behaviour
+                   </div>
+                   <div className="flex items-center gap-3 text-[14px] text-slate-700">
+                     <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Setting capabilities
+                   </div>
+                   <div className="flex items-center gap-3 text-[14px] text-slate-700">
+                     <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Saving your agent
+                   </div>
                  </div>
-                 <div className="flex items-center gap-3 text-[14px] text-blue-600 font-medium animate-pulse">
-                   <Loader2 className="w-4 h-4 animate-spin" /> Preparing runtime
+               </>
+             ) : (
+               <>
+                 <div className="relative">
+                    <div className="absolute inset-0 bg-blue-100 rounded-full animate-ping opacity-75"></div>
+                    <div className="w-16 h-16 relative bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg">
+                       <Bot className="w-8 h-8 animate-pulse" />
+                    </div>
                  </div>
-               </div>
-             </div>
+                 <div>
+                   <h2 className="text-xl font-bold text-slate-900">Saving your agent...</h2>
+                   <div className="mt-6 space-y-2 text-left w-64 mx-auto">
+                     <div className="flex items-center gap-3 text-[14px] text-slate-700">
+                       <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Understanding requirements
+                     </div>
+                     <div className="flex items-center gap-3 text-[14px] text-slate-700">
+                       <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Configuring behaviour
+                     </div>
+                     <div className="flex items-center gap-3 text-[14px] text-slate-700">
+                       <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Setting capabilities
+                     </div>
+                     <div className="flex items-center gap-3 text-[14px] text-blue-600 font-medium animate-pulse">
+                       <Loader2 className="w-4 h-4 animate-spin" /> Saving your agent
+                     </div>
+                   </div>
+                 </div>
+               </>
+             )}
           </div>
         )}
 
