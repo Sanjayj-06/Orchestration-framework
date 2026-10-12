@@ -202,7 +202,28 @@ class GeminiProvider(AIProvider):
             elif "BLOCKLIST" in finish_str or "PROHIBITED" in finish_str:
                 raise ValueError(f"Gemini response blocked by policy (finish_reason={finish_str}).")
             elif "MALFORMED_FUNCTION_CALL" in finish_str:
-                raise ValueError(f"Gemini model attempted an invalid function call (finish_reason={finish_str}).")
+                logger.warning(f"[GeminiProvider] MALFORMED_FUNCTION_CALL detected. Attempting text recovery or pure completion fallback...")
+                if candidate_count > 0 and candidates[0].content and candidates[0].content.parts:
+                    for part in candidates[0].content.parts:
+                        t = getattr(part, "text", None)
+                        if t and t.strip():
+                            return t
+                try:
+                    fb_config = types.GenerateContentConfig(
+                        system_instruction=system_prompt + "\n\nDo NOT invoke functions or tools. Generate pure text/markdown response only.",
+                        temperature=temperature,
+                        max_output_tokens=effective_max_tokens
+                    )
+                    fb_resp = client.models.generate_content(
+                        model=used_model,
+                        contents=message,
+                        config=fb_config
+                    )
+                    if fb_resp and fb_resp.text:
+                        return fb_resp.text
+                except Exception as fb_err:
+                    logger.warning(f"[GeminiProvider] Pure text recovery error: {fb_err}")
+                raise ValueError(f"Gemini model attempted an invalid function call (finish_reason={finish_str}). Pure LLM text completion node required.")
             elif "MAX_TOKENS" in finish_str:
                 raise ValueError(f"Gemini response was cut off before text generation began (finish_reason={finish_str}).")
             else:

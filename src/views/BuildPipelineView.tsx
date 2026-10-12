@@ -18,9 +18,11 @@ import {
 import { Sidebar } from '../components/Sidebar';
 import { NodeInspector } from '../components/NodeInspector';
 import { AgentNode, StartNode, OutputNode } from '../components/nodes/AgentNode';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import type { Agent } from '../types/agent';
 import { chatWithAgent } from '../services/api';
-import { Play, Save, CheckCircle2, AlertCircle, Bot, Sparkles, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { Play, Save, CheckCircle2, AlertCircle, Bot, X, ChevronDown, ChevronRight, Copy } from 'lucide-react';
+import { UNIVERSAL_FORMATTING_DIRECTIVE, generateDomainAwareMockReport } from '../constants/formatting';
 
 interface BuildPipelineViewProps {
   agents?: Agent[];
@@ -219,6 +221,11 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
         stepInputString = lastNodeId ? executionContext.nodeResults[lastNodeId].output : "";
       } else if (agent) {
         const lowerName = agent.name.toLowerCase();
+        const outEdge = edges.find(e => e.source === nodeId);
+        const targetNode = outEdge ? nodes.find(n => n.id === outEdge.target) : null;
+        const isNextNodeFinalOutput = targetNode?.type === 'outputNode';
+        const isReportOrFormatting = lowerName.includes("report") || lowerName.includes("format") || lowerName.includes("synthesiz") || agent.specification.output?.format === 'report' || isNextNodeFinalOutput;
+
         inputObj.originalQuestion = executionContext.originalInput;
         inputKeys.push("originalQuestion");
 
@@ -240,7 +247,8 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
              inputObj.comparison = executionContext.nodeResults[compNodeId].output;
              inputKeys.push("comparison");
           }
-        } else if (lowerName.includes("report")) {
+        } else if (isReportOrFormatting) {
+          // Accumulate all upstream findings into the synthesizer
           const resNodeId = Object.keys(executionContext.nodeResults).find(k => executionContext.nodeResults[k].name.toLowerCase().includes("research"));
           if (resNodeId) { inputObj.researchFindings = executionContext.nodeResults[resNodeId].output; inputKeys.push("researchFindings"); }
           
@@ -252,6 +260,16 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
           
           const sumNodeId = Object.keys(executionContext.nodeResults).find(k => executionContext.nodeResults[k].name.toLowerCase().includes("summary"));
           if (sumNodeId) { inputObj.summary = executionContext.nodeResults[sumNodeId].output; inputKeys.push("summary"); }
+
+          const prevNodeId = Object.keys(executionContext.nodeResults).pop();
+          if (prevNodeId && !inputObj.summary && !inputObj.comparison && !inputObj.researchFindings) {
+            inputObj.upstreamOutput = executionContext.nodeResults[prevNodeId].output;
+            inputKeys.push("upstreamOutput");
+          }
+
+          // Inject universal formatting guideline into synthesis prompt
+          inputObj.formattingDirective = UNIVERSAL_FORMATTING_DIRECTIVE;
+          inputKeys.push("formattingDirective");
         } else if (!lowerName.includes("research")) {
            const prevNodeId = Object.keys(executionContext.nodeResults).pop();
            if (prevNodeId) {
@@ -299,6 +317,11 @@ const BuildPipelineContent: React.FC<BuildPipelineViewProps> = ({ agents = [] })
       let nodeOutput = stepInputString;
 
       if (agent) {
+        const outEdge = edges.find(e => e.source === nodeId);
+        const targetNode = outEdge ? nodes.find(n => n.id === outEdge.target) : null;
+        const isNextNodeFinalOutput = targetNode?.type === 'outputNode';
+        const isReportOrFormatting = agent.name.toLowerCase().includes("report") || agent.name.toLowerCase().includes("format") || agent.name.toLowerCase().includes("synthesiz") || agent.specification.output?.format === 'report' || isNextNodeFinalOutput;
+
         if (executionMode === 'AI_RUNTIME') {
           try {
             const response = await chatWithAgent(agent.id, stepInputString);
@@ -336,7 +359,9 @@ ${response.response}`;
           const lowerName = agent.name.toLowerCase();
           
           let mockContent = "";
-          if (lowerName.includes("research")) {
+          if (isReportOrFormatting || lowerName.includes("report")) {
+            mockContent = generateDomainAwareMockReport(executionContext.originalInput);
+          } else if (lowerName.includes("research")) {
             mockContent = `[LOCAL MOCK]\nResearch findings generated for:\n${inputObj.originalQuestion || ''}`;
           } else if (lowerName.includes("fact")) {
             mockContent = `[LOCAL MOCK]\nFact-check result generated from:\n${inputObj.researchFindings ? inputObj.researchFindings.substring(0, 50) + '...' : ''}`;
@@ -344,8 +369,6 @@ ${response.response}`;
             mockContent = `[LOCAL MOCK]\nComparison generated from:\n${inputObj.verifiedFindings ? inputObj.verifiedFindings.substring(0, 50) + '...' : ''}`;
           } else if (lowerName.includes("summary")) {
             mockContent = `[LOCAL MOCK]\nSummary generated from:\n${inputObj.comparison ? inputObj.comparison.substring(0, 50) + '...' : ''}`;
-          } else if (lowerName.includes("report")) {
-            mockContent = `[LOCAL MOCK]\nFinal report generated for:\n${inputObj.originalQuestion || ''}`;
           } else {
             mockContent = `[LOCAL MOCK]\nProcessed based on purpose:\n${purpose}`;
           }
@@ -364,10 +387,12 @@ ${response.response}`;
       
       currentSteps = currentSteps.map(s => s.id === nodeId ? { ...s, status: 'success', output: nodeOutput, duration } : s);
       setExecutionSteps([...currentSteps]);
-      setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status: 'success' } } : n));
+      setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status: 'success', output: nodeOutput } } : n));
 
       if (currentNode.type === 'outputNode') {
-        setExecutionResult(nodeOutput);
+        const cleanOutput = nodeOutput.replace(/^\[Execution Mode:[\s\S]*?\n\n/, '');
+        setExecutionResult(cleanOutput || nodeOutput);
+        setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status: 'success', output: cleanOutput || nodeOutput } } : n));
         break;
       }
 
@@ -493,7 +518,7 @@ ${response.response}`;
           {isDraggingOverCanvas && (
             <div className="absolute inset-0 border-2 border-dashed border-blue-500 bg-blue-50/50 pointer-events-none flex items-center justify-center z-20">
               <span className="text-sm font-bold text-blue-700 bg-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-blue-500" />
+                <Bot className="w-5 h-5 text-blue-500" />
                 Drop to Add to Pipeline
               </span>
             </div>
@@ -560,7 +585,7 @@ ${response.response}`;
                             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                         }`}
                       >
-                        <div className="font-bold text-sm flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> AI Runtime</div>
+                        <div className="font-bold text-sm">AI Runtime</div>
                         <div className="text-[10px] opacity-80">Live execution with real LLMs</div>
                       </button>
                     </div>
@@ -658,8 +683,14 @@ ${response.response}`;
                                       {step.output ? step.output.length : 0} chars
                                     </span>
                                   </div>
-                                  <div className="text-slate-800 bg-white p-2.5 rounded border border-slate-100 whitespace-pre-wrap font-mono text-[11px] max-h-48 overflow-y-auto custom-scrollbar shadow-sm">
-                                    {step.output || 'No output'}
+                                  <div className="text-slate-800 bg-white p-3 rounded-lg border border-slate-200 text-[12px] max-h-64 overflow-y-auto custom-scrollbar shadow-xs">
+                                    {step.output && (step.output.includes('#') || step.output.includes('|') || step.output.includes('**')) ? (
+                                      <MarkdownRenderer content={step.output} />
+                                    ) : (
+                                      <pre className="whitespace-pre-wrap font-mono text-[11px] text-slate-700 m-0">
+                                        {step.output || 'No output'}
+                                      </pre>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -673,11 +704,22 @@ ${response.response}`;
                   {/* Final Output */}
                   {executionResult && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
-                        <Sparkles className="w-4 h-4" /> Final Output
-                      </h4>
-                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5 text-indigo-900 text-sm leading-relaxed shadow-sm">
-                        {executionResult}
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wider">
+                          Executive Final Output
+                        </h4>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(executionResult);
+                            alert('Executive Markdown report copied to clipboard!');
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 border border-indigo-200 text-indigo-700 rounded-lg text-xs font-semibold shadow-xs transition active:scale-95 cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5" /> Copy Markdown
+                        </button>
+                      </div>
+                      <div className="bg-white border border-indigo-200 rounded-2xl p-6 text-slate-800 text-sm leading-relaxed shadow-sm">
+                        <MarkdownRenderer content={executionResult} />
                       </div>
                     </div>
                   )}

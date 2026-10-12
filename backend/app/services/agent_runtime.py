@@ -13,6 +13,33 @@ except ImportError:
     from ..db.database import save_chat_message, get_chat_history
     from .providers import OpenAIProvider, GeminiProvider, AnthropicProvider
 
+UNIVERSAL_FORMATTING_DIRECTIVE = """[UNIVERSAL FORMATTING DIRECTIVE]
+Synthesize the accumulated upstream context into a clean, executive Markdown document. Dynamically adapt the headers and matrix fields to match the user's specific domain (e.g., sports, academics, product reviews, economics, entertainment).
+
+Strict Document Hierarchy:
+# [Dynamic Topic Title]
+
+## 1. Executive Summary
+- Concise 2-3 sentence direct answer to the user's prompt.
+- Core verdict or high-level takeaway.
+
+## 2. Comparative Matrix / Core Data
+| Dimension / Metric | Subject A / Option 1 | Subject B / Option 2 | Notes / Benchmark |
+| :--- | :--- | :--- | :--- |
+(Populate with 4–7 relevant comparative attributes based on the domain: e.g., stats for sports, fees/placements for colleges, specs for tech, metrics for economics).
+
+## 3. Key Findings & Detailed Analysis
+- **[Dimension 1]:** Bulleted breakdown with concrete facts and numbers.
+- **[Dimension 2]:** Bulleted breakdown with concrete facts and numbers.
+- **[Dimension 3]:** Bulleted breakdown with concrete facts and numbers.
+
+## 4. Strengths, Caveats & Missing Data
+- **Highlights / Strengths:** Key advantages or standout points.
+- **Limitations / Gaps:** Explicitly note missing data, assumptions, or unverified claims.
+
+## 5. Sources & References
+- List extracted URLs, verified sources, or data origins from upstream nodes."""
+
 class AgentRuntime:
     def __init__(self):
         pass
@@ -39,71 +66,87 @@ class AgentRuntime:
         )
         save_chat_message(agent.id, session_id, user_msg)
         
+        # Determine if this node is a pure structuring or report node
+        lower_name = agent.name.lower()
+        lower_purpose = (agent.purpose or "").lower()
+        output_format = agent.specification.output.format if agent.specification.output else "normal"
+        custom_instruction = agent.specification.output.custom_instruction if agent.specification.output else ""
+
+        is_pure_structuring = (
+            any(k in lower_name for k in ["report", "format", "structur", "synthesiz", "executive"]) or
+            any(k in lower_purpose for k in ["final report", "executive report", "format output", "structuring", "synthesize"]) or
+            output_format == "report" or
+            "[UNIVERSAL FORMATTING DIRECTIVE]" in message or
+            "[UNIVERSAL FORMATTING DIRECTIVE]" in (custom_instruction or "")
+        )
+
         # 3. Simulate / Execute Tool Calling
         tool_steps: List[ToolStep] = []
         caps = agent.specification.capabilities
         msg_lower = message.lower()
-        
-        # Tool: Web Search
-        if caps.web_search and any(w in msg_lower for w in ["search", "paper", "recent", "find", "latest", "what is", "who", "compare", "research", "news", "literature", "source"]):
-            query_focus = message[:60].strip()
-            tool_steps.append(ToolStep(
-                tool="web_search",
-                title=f"Searching web for '{query_focus}...' ",
-                status="completed",
-                detail="Queried global index and academic repositories",
-                output="Discovered verified citations, documentation, and empirical articles."
-            ))
-            
-        # Tool: Files / Document Analysis
-        if caps.files and any(w in msg_lower for w in ["file", "document", "pdf", "read", "extract", "contract", "paper", "summarize", "page"]):
-            tool_steps.append(ToolStep(
-                tool="files",
-                title="Reading and extracting document structure...",
-                status="completed",
-                detail="Parsed document schema, paragraphs, and entity tables",
-                output="Extracted semantic headers, clauses, and primary arguments."
-            ))
 
-        # Tool: Data Analysis
-        if caps.data_analysis and any(w in msg_lower for w in ["data", "calculate", "stats", "metric", "excel", "csv", "numbers", "variance", "table", "sum", "average", "trend"]):
-            tool_steps.append(ToolStep(
-                tool="data_analysis",
-                title="Analyzing numerical dataset and computing metrics...",
-                status="completed",
-                detail="Computed descriptive statistics, standard deviation, and trend slope",
-                output="Calculated quantitative distribution and summary KPIs."
-            ))
+        # Pure structuring / report nodes have tool execution strictly disabled to avoid MALFORMED_FUNCTION_CALL
+        if not is_pure_structuring:
+            # Tool: Web Search
+            if caps.web_search and any(w in msg_lower for w in ["search", "paper", "recent", "find", "latest", "what is", "who", "compare", "research", "news", "literature", "source"]):
+                query_focus = message[:60].strip()
+                tool_steps.append(ToolStep(
+                    tool="web_search",
+                    title=f"Searching web for '{query_focus}...' ",
+                    status="completed",
+                    detail="Queried global index and academic repositories",
+                    output="Discovered verified citations, documentation, and empirical articles."
+                ))
+                
+            # Tool: Files / Document Analysis
+            if caps.files and any(w in msg_lower for w in ["file", "document", "pdf", "read", "extract", "contract", "paper", "summarize", "page"]):
+                tool_steps.append(ToolStep(
+                    tool="files",
+                    title="Reading and extracting document structure...",
+                    status="completed",
+                    detail="Parsed document schema, paragraphs, and entity tables",
+                    output="Extracted semantic headers, clauses, and primary arguments."
+                ))
 
-        # Tool: Code Execution Sandbox
-        if caps.code_execution and any(w in msg_lower for w in ["code", "run", "python", "script", "algorithm", "execute", "debug", "test", "function"]):
-            tool_steps.append(ToolStep(
-                tool="code_execution",
-                title="Running code in isolated Python sandbox...",
-                status="completed",
-                detail="Executed script in secure sandbox environment",
-                output="Code executed successfully (exit code 0, 0 stderr)."
-            ))
+            # Tool: Data Analysis
+            if caps.data_analysis and any(w in msg_lower for w in ["data", "calculate", "stats", "metric", "excel", "csv", "numbers", "variance", "table", "sum", "average", "trend"]):
+                tool_steps.append(ToolStep(
+                    tool="data_analysis",
+                    title="Analyzing numerical dataset and computing metrics...",
+                    status="completed",
+                    detail="Computed descriptive statistics, standard deviation, and trend slope",
+                    output="Calculated quantitative distribution and summary KPIs."
+                ))
 
-        # Tool: Database
-        if caps.database and any(w in msg_lower for w in ["database", "db", "sql", "query", "record", "rows", "schema"]):
-            tool_steps.append(ToolStep(
-                tool="database",
-                title="Querying relational database schema...",
-                status="completed",
-                detail="Connected to database and ran optimized SQL query",
-                output="Fetched matched rows and relational constraints."
-            ))
+            # Tool: Code Execution Sandbox
+            if caps.code_execution and any(w in msg_lower for w in ["code", "run", "python", "script", "algorithm", "execute", "debug", "test", "function"]):
+                tool_steps.append(ToolStep(
+                    tool="code_execution",
+                    title="Running code in isolated Python sandbox...",
+                    status="completed",
+                    detail="Executed script in secure sandbox environment",
+                    output="Code executed successfully (exit code 0, 0 stderr)."
+                ))
 
-        # Tool: APIs
-        if caps.apis and any(w in msg_lower for w in ["api", "service", "webhook", "fetch", "external", "request"]):
-            tool_steps.append(ToolStep(
-                tool="apis",
-                title="Calling external API service endpoint...",
-                status="completed",
-                detail="Sent HTTP GET/POST with authenticated payload",
-                output="HTTP 200 OK received with valid JSON response."
-            ))
+            # Tool: Database
+            if caps.database and any(w in msg_lower for w in ["database", "db", "sql", "query", "record", "rows", "schema"]):
+                tool_steps.append(ToolStep(
+                    tool="database",
+                    title="Querying relational database schema...",
+                    status="completed",
+                    detail="Connected to database and ran optimized SQL query",
+                    output="Fetched matched rows and relational constraints."
+                ))
+
+            # Tool: APIs
+            if caps.apis and any(w in msg_lower for w in ["api", "service", "webhook", "fetch", "external", "request"]):
+                tool_steps.append(ToolStep(
+                    tool="apis",
+                    title="Calling external API service endpoint...",
+                    status="completed",
+                    detail="Sent HTTP GET/POST with authenticated payload",
+                    output="HTTP 200 OK received with valid JSON response."
+                ))
 
         # 4. Generate Response
         api_keys = api_keys or {}
@@ -137,9 +180,21 @@ class AgentRuntime:
         sys_prompt += f"\nWorking Style: {agent.specification.behavior.style}."
         sys_prompt += f"\nAutonomy Level: {agent.specification.behavior.autonomy}."
         sys_prompt += f"\nOutput Format: {agent.specification.output.format}."
-        if tool_steps:
+
+        if is_pure_structuring:
+            if "[UNIVERSAL FORMATTING DIRECTIVE]" not in sys_prompt:
+                sys_prompt += f"\n\n{UNIVERSAL_FORMATTING_DIRECTIVE}"
+            sys_prompt += (
+                "\n\n[EXECUTION ROLE: PURE STRUCTURING / REPORT NODE]\n"
+                "Function and tool calling are STRICTLY DISABLED for this node.\n"
+                "You must run pure LLM text completion only to prevent MALFORMED_FUNCTION_CALL runtime errors.\n"
+                "Do NOT attempt, invoke, or emit any tool/function call syntax or code blocks mimicking tool calling.\n"
+                "Output the final executive Markdown document directly."
+            )
+        elif tool_steps:
             sys_prompt += "\nTool activity during this step:\n" + "\n".join([f"- {t.tool}: {t.output}" for t in tool_steps])
             sys_prompt += "\nSynthesize all tool findings directly into your final response. Do not emit function call syntax."
+
 
         history_dicts = [{"role": h.role, "content": h.content} for h in history]
 

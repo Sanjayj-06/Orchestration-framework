@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { Node } from '@xyflow/react';
-import { Settings2, X, Trash2, Bot, Play, ExternalLink } from 'lucide-react';
+import { Settings2, X, Trash2, Bot, Play, ExternalLink, Copy, Check } from 'lucide-react';
 import type { Agent } from '../types/agent';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface NodeInspectorProps {
   selectedNode: Node | null;
@@ -25,6 +26,7 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
   updateNodeData
 }) => {
   const [localInputContract, setLocalInputContract] = React.useState<any>(null);
+  const [copiedOutput, setCopiedOutput] = useState(false);
 
   React.useEffect(() => {
     if (selectedNode?.type === 'startNode' && selectedNode.data.inputContract) {
@@ -298,9 +300,37 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
         ) : selectedNode.type === 'outputNode' ? (
            <div className="space-y-4">
              <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Output Node</h4>
-             <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl text-indigo-800 text-sm">
-                This node captures the final result of the pipeline. The output of the last connected agent will be returned as the pipeline's execution result.
+             <div className="bg-indigo-50 border border-indigo-100 p-3.5 rounded-xl text-indigo-800 text-xs leading-relaxed">
+                Captures the final result of the pipeline. Upstream context is synthesized into the executive Markdown document.
              </div>
+
+             {selectedNode.data?.output ? (
+               <div className="space-y-3 pt-2">
+                 <div className="flex items-center justify-between">
+                   <h5 className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider">
+                     Canvas Output Preview
+                   </h5>
+                   <button
+                     onClick={() => {
+                       const outText = String(selectedNode.data?.output || '');
+                       navigator.clipboard.writeText(outText);
+                       setCopiedOutput(true);
+                       setTimeout(() => setCopiedOutput(false), 2000);
+                     }}
+                     className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-white hover:bg-slate-50 border border-indigo-200 px-2 py-1 rounded transition shadow-xs cursor-pointer"
+                   >
+                     {copiedOutput ? <><Check className="w-3 h-3 text-emerald-600" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+                   </button>
+                 </div>
+                 <div className="p-3 bg-white border border-slate-200 rounded-xl text-xs max-h-96 overflow-y-auto custom-scrollbar shadow-xs">
+                   <MarkdownRenderer content={String(selectedNode.data?.output || '')} />
+                 </div>
+               </div>
+             ) : (
+               <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400">
+                 Run the pipeline to generate and preview the executive Markdown output here.
+               </div>
+             )}
              <div className="pt-4 border-t border-slate-100">
                <button 
                  onClick={() => onDeleteNode(selectedNode.id)}

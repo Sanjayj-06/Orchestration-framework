@@ -28,6 +28,33 @@ except ImportError:
         RequirementAnalysisResponse
     )
 
+UNIVERSAL_FORMATTING_DIRECTIVE = """[UNIVERSAL FORMATTING DIRECTIVE]
+Synthesize the accumulated upstream context into a clean, executive Markdown document. Dynamically adapt the headers and matrix fields to match the user's specific domain (e.g., sports, academics, product reviews, economics, entertainment).
+
+Strict Document Hierarchy:
+# [Dynamic Topic Title]
+
+## 1. Executive Summary
+- Concise 2-3 sentence direct answer to the user's prompt.
+- Core verdict or high-level takeaway.
+
+## 2. Comparative Matrix / Core Data
+| Dimension / Metric | Subject A / Option 1 | Subject B / Option 2 | Notes / Benchmark |
+| :--- | :--- | :--- | :--- |
+(Populate with 4–7 relevant comparative attributes based on the domain: e.g., stats for sports, fees/placements for colleges, specs for tech, metrics for economics).
+
+## 3. Key Findings & Detailed Analysis
+- **[Dimension 1]:** Bulleted breakdown with concrete facts and numbers.
+- **[Dimension 2]:** Bulleted breakdown with concrete facts and numbers.
+- **[Dimension 3]:** Bulleted breakdown with concrete facts and numbers.
+
+## 4. Strengths, Caveats & Missing Data
+- **Highlights / Strengths:** Key advantages or standout points.
+- **Limitations / Gaps:** Explicitly note missing data, assumptions, or unverified claims.
+
+## 5. Sources & References
+- List extracted URLs, verified sources, or data origins from upstream nodes."""
+
 def analyze_user_requirement(requirement: str, preferred_name: Optional[str] = None) -> RequirementAnalysisResponse:
     from dotenv import load_dotenv
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
@@ -105,9 +132,26 @@ Return ONLY valid JSON without any markdown formatting block.
                 "Give me an example of what you can do."
             ])
             
-            # Map tools
+            # Map tools and detect report/structuring node
             caps = parsed.get("capabilities", {})
-            active_tools = [k for k, v in caps.items() if v]
+            out_dict = parsed.get("output", {})
+            out_fmt = out_dict.get("format", "normal")
+            req_check = (requirement + " " + name + " " + purpose).lower()
+            is_report_node = (
+                out_fmt == "report" or
+                any(k in req_check for k in ["report", "synthesis", "formatter", "summary", "summarize", "executive", "format", "final output"])
+            )
+
+            if is_report_node:
+                out_dict["format"] = "report"
+                out_dict["custom_instruction"] = UNIVERSAL_FORMATTING_DIRECTIVE
+                # Disable function / tool calling on pure structuring nodes to avoid MALFORMED_FUNCTION_CALL
+                caps = {k: False for k in caps}
+                active_tools = []
+                system_prompt = f"You are {name}. Purpose: {purpose}.\n\n{UNIVERSAL_FORMATTING_DIRECTIVE}\n\nNote: You are a pure structuring node. Do not call functions or tools."
+            else:
+                active_tools = [k for k, v in caps.items() if v]
+                system_prompt = f"You are {name}. Your purpose is: {purpose}. Always act in accordance with your specified working style and capabilities."
             
             spec = AgentSpecification(
                 name=name,
@@ -119,9 +163,9 @@ Return ONLY valid JSON without any markdown formatting block.
                 tools=active_tools,
                 memory=AgentMemory(**parsed.get("memory", {})),
                 model=AgentModel(**parsed.get("model", {})),
-                output=AgentOutput(**parsed.get("output", {})),
+                output=AgentOutput(**out_dict),
                 advanced=AgentAdvanced(
-                    system_prompt=f"You are {name}. Your purpose is: {purpose}. Always act in accordance with your specified working style and capabilities.",
+                    system_prompt=system_prompt,
                     context_window=8000,
                     retry_attempts=3,
                     tool_timeout_seconds=30
@@ -144,7 +188,28 @@ Return ONLY valid JSON without any markdown formatting block.
     req_lower = requirement.lower()
 
     # Domain Detection & Mapping
-    if any(k in req_lower for k in ["paper", "research", "summarize", "literature", "scholar", "academic", "gap", "study", "arxiv"]):
+    if any(k in req_lower for k in ["report", "synthesis", "formatter", "summary", "summarize", "executive", "format", "final output"]):
+        domain = "report"
+        name = preferred_name or "Executive Report Formatter"
+        purpose = "Synthesize upstream context and multi-agent findings into standardized, executive-grade Markdown reports."
+        description = "A dedicated reporting and synthesis agent that compiles multi-source findings into clean, structured Markdown reports with comparative matrices."
+        tasks = [
+            "Synthesize accumulated findings and upstream context",
+            "Construct domain-adapted comparative matrices and core data tables",
+            "Highlight key analytical findings and quantitative metrics",
+            "Identify strengths, caveats, and unverified data gaps",
+            "Format final deliverables according to executive Markdown standards"
+        ]
+        style = "professional"
+        autonomy = "automatic"
+        caps = AgentCapabilities(web_search=False, files=False, data_analysis=False, code_execution=False, database=False, apis=False, other_agents=False)
+        output_format = "report"
+        sample_questions = [
+            "Synthesize the research and metrics on the candidates into an executive brief.",
+            "Generate a domain-adapted comparative matrix comparing our options.",
+            "Format the upstream findings into a clean Markdown report with verified sources."
+        ]
+    elif any(k in req_lower for k in ["paper", "research", "literature", "scholar", "academic", "gap", "study", "arxiv"]):
         domain = "research"
         name = preferred_name or "Research Assistant"
         purpose = "Find and analyze academic papers, summarize findings, and identify unaddressed research gaps."
@@ -317,14 +382,34 @@ Return ONLY valid JSON without any markdown formatting block.
         ]
 
     # Map capabilities into tool list
-    active_tools = []
-    if caps.web_search: active_tools.append("web_search")
-    if caps.files: active_tools.append("file_processing")
-    if caps.data_analysis: active_tools.append("data_analysis")
-    if caps.code_execution: active_tools.append("code_execution")
-    if caps.database: active_tools.append("database")
-    if caps.apis: active_tools.append("apis")
-    if caps.other_agents: active_tools.append("other_agents")
+    custom_instruction = ""
+    is_pure_structuring = (
+        domain == "report" or
+        output_format == "report" or
+        any(k in name.lower() for k in ["report", "format", "structur", "synthesiz", "executive"])
+    )
+
+    if is_pure_structuring:
+        output_format = "report"
+        custom_instruction = UNIVERSAL_FORMATTING_DIRECTIVE
+        # Pure structuring/report nodes have tool capabilities strictly disabled
+        caps = AgentCapabilities(web_search=False, files=False, data_analysis=False, code_execution=False, database=False, apis=False, other_agents=False)
+        active_tools = []
+        system_prompt = (
+            f"You are {name}. Purpose: {purpose}. Working style: {style}. Work with {autonomy} autonomy.\n\n"
+            f"{UNIVERSAL_FORMATTING_DIRECTIVE}\n\n"
+            f"Note: You are a pure structuring node. Do not call functions or tools."
+        )
+    else:
+        active_tools = []
+        if caps.web_search: active_tools.append("web_search")
+        if caps.files: active_tools.append("file_processing")
+        if caps.data_analysis: active_tools.append("data_analysis")
+        if caps.code_execution: active_tools.append("code_execution")
+        if caps.database: active_tools.append("database")
+        if caps.apis: active_tools.append("apis")
+        if caps.other_agents: active_tools.append("other_agents")
+        system_prompt = f"You are {name}. Purpose: {purpose}. Working style: {style}. Work with {autonomy} autonomy."
 
     spec = AgentSpecification(
         name=name,
@@ -335,10 +420,10 @@ Return ONLY valid JSON without any markdown formatting block.
         capabilities=caps,
         tools=active_tools,
         memory=AgentMemory(enabled=True, scope="across_conversations", optimization="balanced"),
-        model=AgentModel(provider="recommended", name="auto", temperature=0.4 if style in ["detailed", "technical"] else 0.7, max_tokens=2048),
-        output=AgentOutput(format=output_format, custom_instruction=""),
+        model=AgentModel(provider="recommended", name="auto", temperature=0.3 if is_pure_structuring else (0.4 if style in ["detailed", "technical"] else 0.7), max_tokens=2500),
+        output=AgentOutput(format=output_format, custom_instruction=custom_instruction),
         advanced=AgentAdvanced(
-            system_prompt=f"You are {name}. Purpose: {purpose}. Working style: {style}. Work with {autonomy} autonomy.",
+            system_prompt=system_prompt,
             context_window=8000,
             retry_attempts=3,
             tool_timeout_seconds=30

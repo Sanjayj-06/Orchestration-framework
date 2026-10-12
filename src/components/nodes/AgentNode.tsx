@@ -107,9 +107,12 @@ export const StartNode: React.FC<NodeProps> = ({ selected, data }) => {
   );
 };
 
-export const OutputNode: React.FC<NodeProps> = ({ selected }) => {
+export const OutputNode: React.FC<NodeProps> = ({ selected, data }) => {
+  const hasOutput = Boolean(data?.output);
+  const status = data?.status as string;
+
   return (
-    <div className={`px-5 py-3 bg-slate-900 border-2 rounded-full shadow-sm flex items-center gap-2 ${
+    <div className={`px-5 py-3 bg-slate-900 border-2 rounded-2xl shadow-sm flex flex-col gap-1.5 transition-all min-w-[160px] ${
       selected ? 'border-indigo-400 shadow-indigo-500/30' : 'border-slate-800 hover:border-slate-600'
     }`}>
       <Handle 
@@ -117,8 +120,17 @@ export const OutputNode: React.FC<NodeProps> = ({ selected }) => {
         position={Position.Top} 
         className="w-3 h-3 border-2 border-slate-900 bg-white"
       />
-      <CheckCircle2 className="w-4 h-4 text-indigo-400" />
-      <span className="text-sm font-bold text-white">Final Output</span>
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className={`w-4 h-4 ${status === 'success' ? 'text-emerald-400' : 'text-indigo-400'}`} />
+        <span className="text-sm font-bold text-white">Final Output</span>
+      </div>
+      {hasOutput && (
+        <div className="flex items-center gap-1.5 text-[10px] text-indigo-300 font-semibold bg-indigo-950/80 px-2 py-0.5 rounded border border-indigo-800/60 mt-0.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Executive Report Ready</span>
+        </div>
+      )}
     </div>
   );
 };
+

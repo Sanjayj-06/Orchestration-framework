@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bot, Download, Copy, Edit, Trash2, Send, Globe, FileText, Calculator, Terminal, Database, CheckCircle2, RefreshCw, Loader2, ChevronRight, Link } from 'lucide-react';
 import type { Agent, ChatMessage, ToolStep } from '../types/agent';
 import { chatWithAgent, getChatHistory, clearChatHistory, duplicateAgent, deleteAgent } from '../services/api';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 
 interface AgentDashboardViewProps {
   agent: Agent;
@@ -468,9 +469,15 @@ if (require.main === module) {
                           </div>
                         )}
 
-                        <div className="text-slate-800 leading-relaxed whitespace-pre-wrap">
-                          {msg.content}
-                        </div>
+                        {msg.role === 'assistant' ? (
+                          <div className="text-slate-800 leading-relaxed">
+                            <MarkdownRenderer content={msg.content} />
+                          </div>
+                        ) : (
+                          <div className="text-slate-800 leading-relaxed whitespace-pre-wrap">
+                            {msg.content}
+                          </div>
+                        )}
                       </div>
                     ))}
                     

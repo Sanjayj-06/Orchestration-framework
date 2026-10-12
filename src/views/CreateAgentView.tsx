@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, ArrowLeft, CheckCircle2, Check, AlertCircle, Loader2, Globe, FileText, Calculator, Terminal, Link, Bot } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle2, Check, AlertCircle, Loader2, Globe, FileText, Calculator, Terminal, Link, Bot, Sparkles, FileSpreadsheet, ShieldCheck } from 'lucide-react';
 import type { AgentSpecification, WorkingStyle, AutonomyLevel, MemoryScope, AgentCapabilities, ModelProvider, OutputFormat } from '../types/agent';
 import { analyzeRequirement, createAgent, updateAgent } from '../services/api';
+import { UNIVERSAL_FORMATTING_DIRECTIVE } from '../constants/formatting';
 
 interface CreateAgentViewProps {
   initialPrompt?: string;
@@ -57,34 +58,45 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
 
     const tasks: string[] = ["Understand the user's goals", "Execute requested workflows"];
     let purpose = "Provide expert assistance based on user requirements.";
+    let outputFormat: OutputFormat = "normal";
+    let customInstruction = "";
+    const isReportOrStructuring = /(report agent|output formatter|synthesiz|structur|executive report|final report)/i.test(reqLower);
 
-    if (/(research|find information|papers|sources|search|report)/.test(reqLower)) {
-      caps.web_search = true;
-      tasks.push("Search the web for relevant information");
-      tasks.push("Collect and organize sources");
-      purpose = "Research topics and find relevant information.";
-    }
-    if (/(excel|csv|dataset|data)/.test(reqLower)) {
-      caps.data_analysis = true;
-      caps.files = true;
-      tasks.push("Analyze datasets and structured data");
-      tasks.push("Generate insights and reports");
-      purpose = "Analyze tabular data and generate insights.";
-    }
-    if (/(pdf|document|file)/.test(reqLower)) {
-      caps.files = true;
-      tasks.push("Read and process documents");
-      tasks.push("Extract information from files");
-    }
-    if (/(code|programming|debug)/.test(reqLower)) {
-      caps.code_execution = true;
-      tasks.push("Analyze and debug code");
-      tasks.push("Write and execute scripts");
-      purpose = "Assist with programming and debugging.";
-    }
+    if (isReportOrStructuring) {
+      purpose = "Synthesize accumulated upstream context into clean, executive Markdown documents with comparative matrices.";
+      tasks.push("Synthesize context from upstream nodes", "Structure executive summary and comparative matrix", "Verify citations and format clean Markdown");
+      outputFormat = "report";
+      customInstruction = UNIVERSAL_FORMATTING_DIRECTIVE;
+      // Pure structuring node: all tool execution is disabled by default to avoid MALFORMED_FUNCTION_CALL errors
+    } else {
+      if (/(research|find information|papers|sources|search)/.test(reqLower)) {
+        caps.web_search = true;
+        tasks.push("Search the web for relevant information");
+        tasks.push("Collect and organize sources");
+        purpose = "Research topics and find relevant information.";
+      }
+      if (/(excel|csv|dataset|data)/.test(reqLower)) {
+        caps.data_analysis = true;
+        caps.files = true;
+        tasks.push("Analyze datasets and structured data");
+        tasks.push("Generate insights and reports");
+        purpose = "Analyze tabular data and generate insights.";
+      }
+      if (/(pdf|document|file)/.test(reqLower)) {
+        caps.files = true;
+        tasks.push("Read and process documents");
+        tasks.push("Extract information from files");
+      }
+      if (/(code|programming|debug)/.test(reqLower)) {
+        caps.code_execution = true;
+        tasks.push("Analyze and debug code");
+        tasks.push("Write and execute scripts");
+        purpose = "Assist with programming and debugging.";
+      }
 
-    if (!caps.web_search && !caps.files && !caps.data_analysis && !caps.code_execution) {
-      caps.web_search = true;
+      if (!caps.web_search && !caps.files && !caps.data_analysis && !caps.code_execution) {
+        caps.web_search = true;
+      }
     }
 
     const activeTools = (Object.keys(caps) as (keyof AgentCapabilities)[])
@@ -102,8 +114,12 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
         return toolMap[k];
       });
 
+    const baseSysPrompt = isReportOrStructuring
+      ? `You are an Executive Report & Structuring Agent named ${name || "Report Agent"}. Your purpose is to ${purpose}.\n\nFunction and tool calling are STRICTLY DISABLED for this node. Run pure LLM text completion only.\n\n${UNIVERSAL_FORMATTING_DIRECTIVE}`
+      : `You are a ${name || "Custom Assistant"}. Your purpose is to ${purpose}. Perform tasks carefully and avoid unsupported claims.`;
+
     return {
-      name: name || "Custom Assistant",
+      name: name || (isReportOrStructuring ? "Executive Report Agent" : "Custom Assistant"),
       purpose,
       description: `An assistant created to help with: ${req}`,
       tasks,
@@ -111,10 +127,10 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
       capabilities: caps,
       tools: activeTools,
       memory: { enabled: true, scope: 'across_conversations', optimization: 'balanced' },
-      model: { provider: 'recommended', name: 'auto', temperature: 0.5, max_tokens: 2048 },
-      output: { format: 'normal', custom_instruction: '' },
+      model: { provider: 'recommended', name: 'auto', temperature: 0.4, max_tokens: 2500 },
+      output: { format: outputFormat, custom_instruction: customInstruction },
       advanced: {
-        system_prompt: `You are a ${name || "Custom Assistant"}. Your purpose is to ${purpose}. Perform tasks carefully and avoid unsupported claims.`,
+        system_prompt: baseSysPrompt,
         context_window: 8000,
         retry_attempts: 3,
         tool_timeout_seconds: 30,
@@ -586,15 +602,132 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
                 <label className="block text-[14px] font-bold text-slate-900 mb-2">Output Format</label>
                 <select 
                   value={spec.output.format}
-                  onChange={(e) => setSpec({...spec, output: {...spec.output, format: e.target.value as OutputFormat}})}
+                  onChange={(e) => {
+                    const newFormat = e.target.value as OutputFormat;
+                    if (newFormat === 'report') {
+                      let newPrompt = spec.advanced?.system_prompt || '';
+                      if (!newPrompt.includes('[UNIVERSAL FORMATTING DIRECTIVE]')) {
+                        newPrompt = `${newPrompt}\n\n${UNIVERSAL_FORMATTING_DIRECTIVE}`;
+                      }
+                      setSpec({
+                        ...spec,
+                        output: { format: 'report', custom_instruction: UNIVERSAL_FORMATTING_DIRECTIVE },
+                        advanced: { ...spec.advanced, system_prompt: newPrompt }
+                      });
+                    } else {
+                      setSpec({
+                        ...spec,
+                        output: { ...spec.output, format: newFormat, custom_instruction: spec.output?.custom_instruction === UNIVERSAL_FORMATTING_DIRECTIVE ? '' : (spec.output?.custom_instruction || '') }
+                      });
+                    }
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-[14px] font-medium"
                 >
-                  <option value="normal">Normal Text</option>
+                  <option value="report">Executive Markdown Report (Standard Layout)</option>
                   <option value="markdown">Markdown Document</option>
-                  <option value="json">JSON Data</option>
+                  <option value="normal">Normal Text</option>
                   <option value="table">Table</option>
-                  <option value="report">Detailed Report</option>
+                  <option value="json">JSON Data</option>
                 </select>
+              </div>
+
+              {/* Universal Executive Markdown Formatting Directive Card */}
+              <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/50 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-[13px] font-bold text-slate-900">Standard Executive Output Structure</h4>
+                      <p className="text-[11px] text-slate-500">Auto-formats responses with executive summary, comparative matrix, key findings, caveats & sources.</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={spec.output?.format === 'report' || Boolean(spec.output?.custom_instruction?.includes('[UNIVERSAL FORMATTING DIRECTIVE]'))}
+                      onChange={(e) => {
+                        const enable = e.target.checked;
+                        if (enable) {
+                          let newPrompt = spec.advanced?.system_prompt || '';
+                          if (!newPrompt.includes('[UNIVERSAL FORMATTING DIRECTIVE]')) {
+                            newPrompt = `${newPrompt}\n\n${UNIVERSAL_FORMATTING_DIRECTIVE}`;
+                          }
+                          setSpec({
+                            ...spec,
+                            output: { format: 'report', custom_instruction: UNIVERSAL_FORMATTING_DIRECTIVE },
+                            advanced: { ...spec.advanced, system_prompt: newPrompt }
+                          });
+                        } else {
+                          const cleanedPrompt = (spec.advanced?.system_prompt || '').replace(/\n\n\[UNIVERSAL FORMATTING DIRECTIVE\][\s\S]*$/, '').trim();
+                          setSpec({
+                            ...spec,
+                            output: { ...spec.output, format: 'normal', custom_instruction: '' },
+                            advanced: { ...spec.advanced, system_prompt: cleanedPrompt }
+                          });
+                        }
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10px] text-indigo-900 font-medium bg-white/80 p-2.5 rounded-lg border border-indigo-100">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                    <span>#1 Executive Summary</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <FileSpreadsheet className="w-3 h-3 text-indigo-500 shrink-0" />
+                    <span>#2 Comparative Matrix Table</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                    <span>#3 Key Findings & Analysis</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                    <span>#4 Strengths & Gaps / Sources</span>
+                  </div>
+                </div>
+
+                {/* Pure Structuring / Text Node Toggle */}
+                <div className="flex items-center justify-between pt-2 border-t border-indigo-100 text-[11px]">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
+                    <span className="font-semibold text-slate-700">Pure Structuring Mode (Disable Tools)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allDisabled = !Object.values(spec.capabilities).some(Boolean);
+                      if (!allDisabled) {
+                        const clearedCaps = Object.keys(spec.capabilities).reduce((acc, k) => ({ ...acc, [k]: false }), {} as AgentCapabilities);
+                        setSpec({ ...spec, capabilities: clearedCaps, tools: [] });
+                      } else {
+                        setSpec({
+                          ...spec,
+                          capabilities: { ...spec.capabilities, web_search: true, files: true },
+                          tools: ['web_search', 'file_processing']
+                        });
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded text-[11px] font-bold border transition ${
+                      !Object.values(spec.capabilities).some(Boolean)
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    {!Object.values(spec.capabilities).some(Boolean) ? 'Active (Tools Disabled)' : 'Disable Tools'}
+                  </button>
+                </div>
+                {!Object.values(spec.capabilities).some(Boolean) && (
+                  <p className="text-[10px] text-emerald-700 font-medium">
+                    ✓ Protected: Pure LLM text completion enabled to prevent function call runtime errors.
+                  </p>
+                )}
               </div>
 
               <div className="border-t border-slate-100 pt-4">
@@ -617,12 +750,12 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-[13px] font-bold text-slate-700 mb-2">Advanced Instructions (Auto-generated)</label>
+                      <label className="block text-[13px] font-bold text-slate-700 mb-2">Advanced Instructions / System Prompt</label>
                       <textarea
                         value={spec.advanced.system_prompt}
                         onChange={(e) => setSpec({...spec, advanced: {...spec.advanced, system_prompt: e.target.value}})}
-                        rows={4}
-                        className="w-full bg-white border border-slate-300 focus:border-blue-500 rounded-lg p-3 text-[13px] font-mono"
+                        rows={6}
+                        className="w-full bg-white border border-slate-300 focus:border-blue-500 rounded-lg p-3 text-[12px] font-mono leading-relaxed"
                       />
                     </div>
                   </div>
@@ -677,6 +810,24 @@ export const CreateAgentView: React.FC<CreateAgentViewProps> = ({
               <div>
                  <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">MEMORY</h3>
                  <div className="text-[14px] text-slate-700 capitalize">{spec.memory.scope.replace('_', ' ')}</div>
+              </div>
+
+              <div>
+                 <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">OUTPUT STRUCTURE</h3>
+                 <div className="flex items-center gap-2 mt-1">
+                   <span className="text-[12px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold px-2.5 py-0.5 rounded-md capitalize flex items-center gap-1.5">
+                     {spec.output?.format === 'report' || Boolean(spec.output?.custom_instruction?.includes('[UNIVERSAL FORMATTING DIRECTIVE]')) ? (
+                       <span>Universal Executive Markdown</span>
+                     ) : (
+                       spec.output.format
+                     )}
+                   </span>
+                   {!Object.values(spec.capabilities).some(Boolean) && (
+                     <span className="text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-700 font-medium px-2 py-0.5 rounded-md flex items-center gap-1">
+                       <ShieldCheck className="w-3 h-3" /> Pure Text Completion (Tools Disabled)
+                     </span>
+                   )}
+                 </div>
               </div>
             </div>
 
