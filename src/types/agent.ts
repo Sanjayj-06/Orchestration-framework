@@ -65,7 +65,8 @@ export type WorkingStyle = 'simple' | 'detailed' | 'professional' | 'creative' |
 export type AutonomyLevel = 'ask_me' | 'guided' | 'automatic';
 export type MemoryScope = 'none' | 'this_conversation' | 'across_conversations';
 export type MemoryOptimization = 'basic' | 'balanced' | 'advanced';
-export type OutputFormat = 'normal' | 'structured' | 'table' | 'report' | 'json' | 'code' | 'custom';
+export type OutputFormat = 'normal' | 'structured' | 'table' | 'report' | 'json' | 'code' | 'markdown' | 'custom';
+export type ModelProvider = 'recommended' | 'openai' | 'gemini' | 'anthropic' | 'custom';
 
 export interface AgentBehavior {
   style: WorkingStyle;
@@ -89,7 +90,7 @@ export interface AgentMemory {
 }
 
 export interface AgentModel {
-  provider: 'recommended' | 'custom';
+  provider: ModelProvider;
   name: string;
   temperature: number;
   max_tokens: number;

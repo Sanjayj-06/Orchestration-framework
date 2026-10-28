@@ -118,6 +118,8 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
+    api_keys: Optional[Dict[str, str]] = None
+    models: Optional[Dict[str, str]] = None
 
 class ChatResponse(BaseModel):
     response: str

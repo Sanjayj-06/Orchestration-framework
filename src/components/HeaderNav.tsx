@@ -2,8 +2,8 @@ import React from 'react';
 import { Bot, Plus } from 'lucide-react';
 
 interface HeaderNavProps {
-  currentTab: 'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates';
-  onNavigate: (tab: 'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates') => void;
+  currentTab: 'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates' | 'settings';
+  onNavigate: (tab: 'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates' | 'settings') => void;
   agentCount: number;
   apiConnected: boolean;
 }
@@ -106,6 +106,11 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
           )}
         </div>
 
+        <button onClick={() => onNavigate('settings')} className={`text-[13px] font-medium transition hidden sm:block ${
+          currentTab === 'settings' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'
+        }`}>
+          Settings
+        </button>
         <button className="text-[13px] font-medium text-slate-500 hover:text-slate-900 transition hidden sm:block">
           Help
         </button>

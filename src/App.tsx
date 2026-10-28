@@ -5,11 +5,12 @@ import { CreateAgentView } from './views/CreateAgentView';
 import { AgentDashboardView } from './views/AgentDashboardView';
 import { AgentLibraryView } from './views/AgentLibraryView';
 import { BuildPipelineView } from './views/BuildPipelineView';
+import { SettingsView } from './views/SettingsView';
 import type { Agent } from './types/agent';
 import { getAgents, getAgent, checkHealth } from './services/api';
 
 export const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates'>('landing');
+  const [currentTab, setCurrentTab] = useState<'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates' | 'settings'>('landing');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [activeAgent, setActiveAgent] = useState<Agent | null>(null);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
@@ -163,6 +164,7 @@ export const App: React.FC = () => {
             <p className="text-sm text-slate-500 max-w-md">Browse pre-configured agent templates to get started quickly. (Coming soon)</p>
           </div>
         )}
+        {currentTab === 'settings' && <SettingsView />}
       </main>
     </div>
   );

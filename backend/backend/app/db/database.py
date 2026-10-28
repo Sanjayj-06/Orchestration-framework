@@ -8,7 +8,38 @@ try:
 except ImportError:
     from backend.app.models.agent_models import Agent, AgentSpecification, ChatMessage, Workflow, ToolStep
 
-DB_PATH = os.environ.get("AGENT_DB_PATH", "agents.db")
+_env_db = os.environ.get("AGENT_DB_PATH")
+if _env_db and os.path.isabs(_env_db):
+    DB_PATH = _env_db
+else:
+    DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "agents.db")
+
+UNIVERSAL_FORMATTING_DIRECTIVE = """[UNIVERSAL FORMATTING DIRECTIVE]
+Synthesize the accumulated upstream context into a clean, executive Markdown document. Dynamically adapt the headers and matrix fields to match the user's specific domain (e.g., sports, academics, product reviews, economics, entertainment).
+
+Strict Document Hierarchy:
+# [Dynamic Topic Title]
+
+## 1. Executive Summary
+- Concise 2-3 sentence direct answer to the user's prompt.
+- Core verdict or high-level takeaway.
+
+## 2. Comparative Matrix / Core Data
+| Dimension / Metric | Subject A / Option 1 | Subject B / Option 2 | Notes / Benchmark |
+| :--- | :--- | :--- | :--- |
+(Populate with 4–7 relevant comparative attributes based on the domain: e.g., stats for sports, fees/placements for colleges, specs for tech, metrics for economics).
+
+## 3. Key Findings & Detailed Analysis
+- **[Dimension 1]:** Bulleted breakdown with concrete facts and numbers.
+- **[Dimension 2]:** Bulleted breakdown with concrete facts and numbers.
+- **[Dimension 3]:** Bulleted breakdown with concrete facts and numbers.
+
+## 4. Strengths, Caveats & Missing Data
+- **Highlights / Strengths:** Key advantages or standout points.
+- **Limitations / Gaps:** Explicitly note missing data, assumptions, or unverified claims.
+
+## 5. Sources & References
+- List extracted URLs, verified sources, or data origins from upstream nodes."""
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -58,6 +89,41 @@ def init_db():
     count = cursor.fetchone()["count"]
     if count == 0:
         seed_default_agents(conn)
+    else:
+        # Ensure Executive Report Agent is seeded for existing databases
+        cursor.execute("SELECT COUNT(*) as count FROM agents WHERE name = 'Executive Report Agent'")
+        if cursor.fetchone()["count"] == 0:
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            exec_spec = {
+                "name": "Executive Report Agent",
+                "purpose": "Synthesize multi-agent research and upstream findings into standardized executive Markdown documents.",
+                "description": "Final formatting and synthesis agent with pure LLM text completion, adhering to standard executive hierarchy with comparative data matrices.",
+                "tasks": [
+                    "Synthesize upstream context into executive-level briefs",
+                    "Construct comparative matrices matching the user's specific domain",
+                    "Provide bulleted breakdowns with concrete facts and numbers",
+                    "Highlight key findings, caveats, and unverified data gaps",
+                    "Compile and verify extracted sources and references"
+                ],
+                "behavior": {"style": "professional", "autonomy": "automatic"},
+                "capabilities": {"web_search": False, "files": False, "data_analysis": False, "code_execution": False, "database": False, "apis": False, "other_agents": False},
+                "tools": [],
+                "memory": {"enabled": True, "scope": "across_conversations", "optimization": "balanced"},
+                "model": {"provider": "recommended", "name": "auto", "temperature": 0.3, "max_tokens": 3000},
+                "output": {"format": "report", "custom_instruction": UNIVERSAL_FORMATTING_DIRECTIVE},
+                "advanced": {
+                    "system_prompt": f"You are an Executive Report Agent specializing in clean, standardized synthesis.\n\n{UNIVERSAL_FORMATTING_DIRECTIVE}\n\nNote: You are a pure structuring node. Do not call functions or tools.",
+                    "context_window": 8000,
+                    "retry_attempts": 3,
+                    "tool_timeout_seconds": 30,
+                    "error_handling": "graceful"
+                }
+            }
+            cursor.execute(
+                "INSERT INTO agents (id, name, description, purpose, status, specification, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ("agent-starter-4", exec_spec["name"], exec_spec["description"], exec_spec["purpose"], "active", json.dumps(exec_spec), now, now)
+            )
+            conn.commit()
     conn.close()
 
 def seed_default_agents(conn):
@@ -117,6 +183,31 @@ def seed_default_agents(conn):
             "model": {"provider": "recommended", "name": "auto", "temperature": 0.3, "max_tokens": 2000},
             "output": {"format": "table", "custom_instruction": "Format tabular comparisons and key metric summaries"},
             "advanced": {"system_prompt": "You are a seasoned data analyst focused on precision, statistical accuracy, and business value.", "context_window": 8000, "retry_attempts": 3, "tool_timeout_seconds": 30, "error_handling": "graceful"}
+        },
+        {
+            "name": "Executive Report Agent",
+            "purpose": "Synthesize multi-agent research and upstream findings into standardized executive Markdown documents.",
+            "description": "Final formatting and synthesis agent with pure LLM text completion, adhering to standard executive hierarchy with comparative data matrices.",
+            "tasks": [
+                "Synthesize upstream context into executive-level briefs",
+                "Construct comparative matrices matching the user's specific domain",
+                "Provide bulleted breakdowns with concrete facts and numbers",
+                "Highlight key findings, caveats, and unverified data gaps",
+                "Compile and verify extracted sources and references"
+            ],
+            "behavior": {"style": "professional", "autonomy": "automatic"},
+            "capabilities": {"web_search": False, "files": False, "data_analysis": False, "code_execution": False, "database": False, "apis": False, "other_agents": False},
+            "tools": [],
+            "memory": {"enabled": True, "scope": "across_conversations", "optimization": "balanced"},
+            "model": {"provider": "recommended", "name": "auto", "temperature": 0.3, "max_tokens": 3000},
+            "output": {"format": "report", "custom_instruction": UNIVERSAL_FORMATTING_DIRECTIVE},
+            "advanced": {
+                "system_prompt": f"You are an Executive Report Agent specializing in clean, standardized synthesis.\n\n{UNIVERSAL_FORMATTING_DIRECTIVE}\n\nNote: You are a pure structuring node. Do not call functions or tools.",
+                "context_window": 8000,
+                "retry_attempts": 3,
+                "tool_timeout_seconds": 30,
+                "error_handling": "graceful"
+            }
         }
     ]
     for idx, spec in enumerate(starter_specs):

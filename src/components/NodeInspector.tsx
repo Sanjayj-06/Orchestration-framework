@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { Node } from '@xyflow/react';
-import { Settings2, X, Trash2, Bot, Play, ExternalLink } from 'lucide-react';
+import { Settings2, X, Trash2, Bot, Play, ExternalLink, Copy, Check } from 'lucide-react';
 import type { Agent } from '../types/agent';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface NodeInspectorProps {
   selectedNode: Node | null;
@@ -11,6 +12,7 @@ interface NodeInspectorProps {
   edgesCount: number;
   onDeleteNode: (nodeId: string) => void;
   onClose: () => void;
+  updateNodeData?: (nodeId: string, data: any) => void;
 }
 
 export const NodeInspector: React.FC<NodeInspectorProps> = ({
@@ -20,8 +22,25 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
   nodesCount,
   edgesCount,
   onDeleteNode,
-  onClose
+  onClose,
+  updateNodeData
 }) => {
+  const [localInputContract, setLocalInputContract] = React.useState<any>(null);
+  const [copiedOutput, setCopiedOutput] = useState(false);
+
+  React.useEffect(() => {
+    if (selectedNode?.type === 'startNode' && selectedNode.data.inputContract) {
+      setLocalInputContract(selectedNode.data.inputContract);
+    } else {
+      setLocalInputContract(null);
+    }
+  }, [selectedNode]);
+
+  const handleSaveInputContract = () => {
+    if (selectedNode && updateNodeData && localInputContract) {
+      updateNodeData(selectedNode.id, { inputContract: localInputContract });
+    }
+  };
   return (
     <aside className="w-80 bg-white border-l border-slate-200 flex flex-col h-full shadow-sm z-20">
       <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
@@ -192,10 +211,82 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
           </div>
         ) : selectedNode.type === 'startNode' ? (
            <div className="space-y-4">
-             <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Input Node</h4>
+             <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pipeline Input</h4>
              <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-emerald-800 text-sm">
-                This node represents the beginning of the pipeline execution. When the pipeline runs, the initial user input is injected here and passed to the first agent.
+                Define the input that will be passed into this pipeline when it runs.
              </div>
+             
+             {localInputContract && (
+               <div className="space-y-4 pt-2">
+                 <div className="space-y-2">
+                   <label className="block text-xs font-semibold text-slate-700">Input Name</label>
+                   <input
+                     type="text"
+                     value={localInputContract.name || ''}
+                     onChange={(e) => setLocalInputContract({ ...localInputContract, name: e.target.value })}
+                     placeholder="e.g. Research Topic"
+                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition shadow-sm text-sm"
+                   />
+                 </div>
+
+                 <div className="space-y-2">
+                   <label className="block text-xs font-semibold text-slate-700">Description</label>
+                   <textarea
+                     rows={2}
+                     value={localInputContract.description || ''}
+                     onChange={(e) => setLocalInputContract({ ...localInputContract, description: e.target.value })}
+                     placeholder='e.g. "Enter the topic or question you want the agents to research."'
+                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition shadow-sm text-xs resize-none"
+                   />
+                 </div>
+
+                 <div className="space-y-2">
+                   <label className="block text-xs font-semibold text-slate-700">Input Type</label>
+                   <select
+                     value={localInputContract.type || 'text'}
+                     onChange={(e) => setLocalInputContract({ ...localInputContract, type: e.target.value })}
+                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition shadow-sm text-sm"
+                   >
+                     <option value="text">Text</option>
+                     <option value="file">File</option>
+                     <option value="url">URL</option>
+                     <option value="json">JSON</option>
+                   </select>
+                 </div>
+
+                 <div className="flex items-center gap-2">
+                   <input
+                     type="checkbox"
+                     id="inputRequired"
+                     checked={localInputContract.required !== false}
+                     onChange={(e) => setLocalInputContract({ ...localInputContract, required: e.target.checked })}
+                     className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                   />
+                   <label htmlFor="inputRequired" className="text-xs font-semibold text-slate-700">Required</label>
+                 </div>
+
+                 <div className="space-y-2">
+                   <label className="block text-xs font-semibold text-slate-700">Example Input</label>
+                   <textarea
+                     rows={3}
+                     value={localInputContract.example || ''}
+                     onChange={(e) => setLocalInputContract({ ...localInputContract, example: e.target.value })}
+                     placeholder='e.g. "Research the impact of AI on education..."'
+                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition shadow-sm text-xs resize-none"
+                   />
+                 </div>
+                 
+                 <div className="pt-2">
+                   <button 
+                     onClick={handleSaveInputContract}
+                     className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition active:scale-95"
+                   >
+                     Save Input
+                   </button>
+                 </div>
+               </div>
+             )}
+
              <div className="pt-4 border-t border-slate-100">
                <button 
                  onClick={() => onDeleteNode(selectedNode.id)}
@@ -209,9 +300,37 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
         ) : selectedNode.type === 'outputNode' ? (
            <div className="space-y-4">
              <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Output Node</h4>
-             <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl text-indigo-800 text-sm">
-                This node captures the final result of the pipeline. The output of the last connected agent will be returned as the pipeline's execution result.
+             <div className="bg-indigo-50 border border-indigo-100 p-3.5 rounded-xl text-indigo-800 text-xs leading-relaxed">
+                Captures the final result of the pipeline. Upstream context is synthesized into the executive Markdown document.
              </div>
+
+             {selectedNode.data?.output ? (
+               <div className="space-y-3 pt-2">
+                 <div className="flex items-center justify-between">
+                   <h5 className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider">
+                     Canvas Output Preview
+                   </h5>
+                   <button
+                     onClick={() => {
+                       const outText = String(selectedNode.data?.output || '');
+                       navigator.clipboard.writeText(outText);
+                       setCopiedOutput(true);
+                       setTimeout(() => setCopiedOutput(false), 2000);
+                     }}
+                     className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-white hover:bg-slate-50 border border-indigo-200 px-2 py-1 rounded transition shadow-xs cursor-pointer"
+                   >
+                     {copiedOutput ? <><Check className="w-3 h-3 text-emerald-600" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+                   </button>
+                 </div>
+                 <div className="p-3 bg-white border border-slate-200 rounded-xl text-xs max-h-96 overflow-y-auto custom-scrollbar shadow-xs">
+                   <MarkdownRenderer content={String(selectedNode.data?.output || '')} />
+                 </div>
+               </div>
+             ) : (
+               <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400">
+                 Run the pipeline to generate and preview the executive Markdown output here.
+               </div>
+             )}
              <div className="pt-4 border-t border-slate-100">
                <button 
                  onClick={() => onDeleteNode(selectedNode.id)}
