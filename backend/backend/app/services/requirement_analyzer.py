@@ -114,11 +114,23 @@ Convert this requirement into a JSON object matching this schema:
 }}
 Return ONLY valid JSON without any markdown formatting block.
 """
-            response = client.models.generate_content(
-                model='gemini-flash-latest',
-                contents=prompt,
-                config=types.GenerateContentConfig(response_mime_type="application/json")
-            )
+            models_to_attempt = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-flash-lite']
+            response = None
+            last_model_err = None
+            for m in models_to_attempt:
+                try:
+                    response = client.models.generate_content(
+                        model=m,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(response_mime_type="application/json")
+                    )
+                    if response and response.text:
+                        break
+                except Exception as ex:
+                    last_model_err = ex
+                    continue
+            if response is None:
+                raise last_model_err or ValueError("Failed to obtain response from Gemini models.")
             raw_text = (response.text or "").strip()
             parsed = json.loads(raw_text)
             

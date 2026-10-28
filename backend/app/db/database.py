@@ -8,7 +8,11 @@ try:
 except ImportError:
     from backend.app.models.agent_models import Agent, AgentSpecification, ChatMessage, Workflow, ToolStep
 
-DB_PATH = os.environ.get("AGENT_DB_PATH", "agents.db")
+_env_db = os.environ.get("AGENT_DB_PATH")
+if _env_db and os.path.isabs(_env_db):
+    DB_PATH = _env_db
+else:
+    DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "agents.db")
 
 UNIVERSAL_FORMATTING_DIRECTIVE = """[UNIVERSAL FORMATTING DIRECTIVE]
 Synthesize the accumulated upstream context into a clean, executive Markdown document. Dynamically adapt the headers and matrix fields to match the user's specific domain (e.g., sports, academics, product reviews, economics, entertainment).

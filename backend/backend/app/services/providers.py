@@ -69,7 +69,8 @@ class GeminiProvider(AIProvider):
         "gemini-2.0-flash": "gemini-3.5-flash",
         "gemini-2.5-flash": "gemini-3.5-flash",
         "gemini-2.5-pro": "gemini-3.5-flash",
-        "gemini-2.5-flash-lite": "gemini-3.1-flash-lite",
+        "gemini-flash-latest": "gemini-3.5-flash-lite",
+        "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
         "auto": "gemini-3.5-flash",
     }
 
@@ -103,34 +104,42 @@ class GeminiProvider(AIProvider):
         # Ensure sufficient tokens for thinking models and output generation
         effective_max_tokens = max(max_tokens or 2048, 2048)
 
-        # Disable or minimize internal thinking budget so chat/generation is not starved
-        thinking_config = None
-        if hasattr(types, "ThinkingConfig"):
-            try:
-                thinking_config = types.ThinkingConfig(thinking_budget=0)
-            except Exception:
-                thinking_config = None
-
         config = types.GenerateContentConfig(
             system_instruction=system_prompt,
             temperature=temperature,
             max_output_tokens=effective_max_tokens,
-            thinking_config=thinking_config,
         )
 
-        # Build chat history for Gemini in google-genai format
-        chat_history = []
-        for h in history[-8:]:
-            role = "user" if h["role"] == "user" else "model"
-            chat_history.append(
-                types.Content(
-                    role=role,
-                    parts=[types.Part.from_text(text=h["content"])]
-                )
+        # Build normalized chat history for Gemini in google-genai format
+        normalized_history = []
+        for h in history:
+            role = "user" if h.get("role") == "user" else "model"
+            content = (h.get("content") or "").strip()
+            if not content:
+                continue
+            if normalized_history and normalized_history[-1]["role"] == role:
+                normalized_history[-1]["content"] += "\n\n" + content
+            else:
+                normalized_history.append({"role": role, "content": content})
+
+        # Gemini conversation history must start with user turn
+        while normalized_history and normalized_history[0]["role"] != "user":
+            normalized_history.pop(0)
+
+        # Gemini conversation history must end with model turn before chat.send_message
+        while normalized_history and normalized_history[-1]["role"] != "model":
+            normalized_history.pop()
+
+        chat_history = [
+            types.Content(
+                role=item["role"],
+                parts=[types.Part.from_text(text=item["content"])]
             )
+            for item in normalized_history[-8:]
+        ]
 
         models_to_try = [resolved_model]
-        for fallback in ["gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.1-flash-lite"]:
+        for fallback in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite"]:
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
 

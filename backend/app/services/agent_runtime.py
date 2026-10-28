@@ -58,13 +58,12 @@ class AgentRuntime:
             else: # across_conversations
                 history = get_chat_history(agent.id, session_id=None, limit=20)
                 
-        # 2. Save User Message
+        # 2. Prepare User Message (persisted alongside assistant reply upon success)
         user_msg = ChatMessage(
             role="user",
             content=message,
             timestamp=now
         )
-        save_chat_message(agent.id, session_id, user_msg)
         
         # Determine if this node is a pure structuring or report node
         lower_name = agent.name.lower()
@@ -246,7 +245,8 @@ class AgentRuntime:
         if not response_text:
             raise ValueError("AI Provider returned an empty response.")
 
-        # 5. Save Assistant Message
+        # 5. Save User and Assistant Messages
+        save_chat_message(agent.id, session_id, user_msg)
         assistant_msg = ChatMessage(
             role="assistant",
             content=response_text,
