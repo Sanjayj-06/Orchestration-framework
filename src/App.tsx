@@ -6,11 +6,12 @@ import { AgentDashboardView } from './views/AgentDashboardView';
 import { AgentLibraryView } from './views/AgentLibraryView';
 import { BuildPipelineView } from './views/BuildPipelineView';
 import { SettingsView } from './views/SettingsView';
+import { ChemistryWorkspaceView } from './views/ChemistryWorkspaceView';
 import type { Agent } from './types/agent';
 import { getAgents, getAgent, checkHealth } from './services/api';
 
 export const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates' | 'settings'>('landing');
+  const [currentTab, setCurrentTab] = useState<'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates' | 'chemistry' | 'settings'>('landing');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [activeAgent, setActiveAgent] = useState<Agent | null>(null);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
@@ -158,6 +159,7 @@ export const App: React.FC = () => {
         )}
 
         {currentTab === 'pipeline' && <BuildPipelineView agents={agents} />}
+        {currentTab === 'chemistry' && <ChemistryWorkspaceView />}
         {currentTab === 'templates' && (
           <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
             <h2 className="text-xl font-bold text-slate-900 mb-2">Agent Templates</h2>

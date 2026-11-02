@@ -83,6 +83,15 @@ def init_db():
             updated_at TEXT NOT NULL
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chemistry_runs (
+            id TEXT PRIMARY KEY,
+            request TEXT NOT NULL,
+            requirements TEXT NOT NULL,
+            result TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
     conn.commit()
 
     cursor.execute("SELECT COUNT(*) as count FROM agents")
@@ -376,3 +385,37 @@ def save_workflow(wf: Workflow) -> Workflow:
     conn.commit()
     conn.close()
     return wf
+
+def save_chemistry_run(run_id: str, request: str, requirements: Dict[str, Any], result: Dict[str, Any], created_at: str) -> None:
+    conn = get_connection()
+    conn.execute(
+        """INSERT OR REPLACE INTO chemistry_runs (id, request, requirements, result, created_at)
+           VALUES (?, ?, ?, ?, ?)""",
+        (run_id, request, json.dumps(requirements), json.dumps(result), created_at)
+    )
+    conn.commit()
+    conn.close()
+
+def get_chemistry_run(run_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM chemistry_runs WHERE id = ?", (run_id,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "request": row["request"],
+        "requirements": json.loads(row["requirements"]),
+        "result": json.loads(row["result"]),
+        "created_at": row["created_at"],
+    }
+
+def list_chemistry_molecules() -> List[Dict[str, Any]]:
+    conn = get_connection()
+    rows = conn.execute("SELECT result FROM chemistry_runs ORDER BY created_at DESC").fetchall()
+    conn.close()
+    molecules: List[Dict[str, Any]] = []
+    for row in rows:
+        result = json.loads(row["result"])
+        molecules.extend(result.get("final_molecules", []))
+    return molecules

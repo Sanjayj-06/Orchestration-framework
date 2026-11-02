@@ -8,6 +8,73 @@ import type {
 
 const API_BASE = '/api';
 
+export interface ChemistryMolecule {
+  id: string;
+  rank?: number;
+  canonical_smiles: string;
+  validation: string;
+  properties: {
+    molecular_weight: number;
+    logp: number;
+    tpsa: number;
+    hbd: number;
+    hba: number;
+    qed: number;
+    solubility_logS?: number | null;
+    solubility_source: string;
+  };
+  passed_constraints: boolean;
+  selection_reason: string;
+}
+
+export interface ChemistryRunResult {
+  run_id: string;
+  status: string;
+  request: string;
+  requirements: {
+    number_of_molecules: number;
+    max_molecular_weight?: number;
+    solubility_requirement: string;
+  };
+  summary: Record<string, number>;
+  agent_trace: Array<{ agent: string; status: string; duration_ms: number }>;
+  final_molecules: ChemistryMolecule[];
+}
+
+export async function discoverMolecules(request: string): Promise<ChemistryRunResult> {
+  let apiKeys: Record<string, string> | undefined;
+  let models: Record<string, string> | undefined;
+  try {
+    const storedKeys = localStorage.getItem('agentcraft_api_keys');
+    const storedModels = localStorage.getItem('agentcraft_models');
+    apiKeys = storedKeys ? JSON.parse(storedKeys) : undefined;
+    models = storedModels ? JSON.parse(storedModels) : undefined;
+  } catch {
+    throw new Error('Saved provider settings could not be read. Please re-enter the provider key in Settings.');
+  }
+
+  const res = await fetch(`${API_BASE}/chemistry/discover`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request, api_keys: apiKeys, models })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Chemistry workflow failed.' }));
+    throw new Error(err.detail || 'Chemistry workflow failed.');
+  }
+  return res.json();
+}
+
+export function moleculeSvgUrl(smiles: string): string {
+  return `${API_BASE}/chemistry/molecules/svg?smiles=${encodeURIComponent(smiles)}`;
+}
+
+export async function getMoleculeSdf(smiles: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/chemistry/molecules/sdf?smiles=${encodeURIComponent(smiles)}`);
+  if (!res.ok) throw new Error('Could not generate the 3D molecular structure.');
+  return res.text();
+}
+
 export async function checkHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/health`);

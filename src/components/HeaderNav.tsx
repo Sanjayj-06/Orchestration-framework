@@ -1,9 +1,9 @@
 import React from 'react';
-import { Bot, Plus } from 'lucide-react';
+import { Bot, Plus, FlaskConical } from 'lucide-react';
 
 interface HeaderNavProps {
-  currentTab: 'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates' | 'settings';
-  onNavigate: (tab: 'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates' | 'settings') => void;
+  currentTab: 'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates' | 'chemistry' | 'settings';
+  onNavigate: (tab: 'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates' | 'chemistry' | 'settings') => void;
   agentCount: number;
   apiConnected: boolean;
 }
@@ -85,6 +85,18 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
             }`}
           >
             Templates
+          </button>
+
+          <button
+            onClick={() => onNavigate('chemistry')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium transition ${
+              currentTab === 'chemistry'
+                ? 'bg-cyan-50 text-cyan-700'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            Chemistry
           </button>
         </nav>
       </div>

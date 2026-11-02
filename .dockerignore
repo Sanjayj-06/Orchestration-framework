@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-ssr
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+backend/agents.db
+backend/*.db
+**/__pycache__
+**/*.py[cod]

@@ -9,12 +9,14 @@ try:
     from app.routes.agents import router as agents_router
     from app.routes.chat import router as chat_router
     from app.routes.workflows import router as workflows_router
+    from app.routes.chemistry import router as chemistry_router
 except ImportError:
     from backend.app.db.database import init_db
     from backend.app.routes.analyze import router as analyze_router
     from backend.app.routes.agents import router as agents_router
     from backend.app.routes.chat import router as chat_router
     from backend.app.routes.workflows import router as workflows_router
+    from backend.app.routes.chemistry import router as chemistry_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,6 +45,7 @@ app.include_router(analyze_router, prefix="/api")
 app.include_router(agents_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
 app.include_router(workflows_router, prefix="/api")
+app.include_router(chemistry_router, prefix="/api")
 
 @app.get("/api/health")
 async def health_check():

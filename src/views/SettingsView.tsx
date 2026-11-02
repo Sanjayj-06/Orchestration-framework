@@ -183,7 +183,7 @@ export const SettingsView: React.FC = () => {
                 />
               </div>
               <p className="text-[11px] text-slate-500 mt-2">
-                Your key is stored securely in your browser's local storage and is never exposed or logged.
+                Your key is stored in this browser's local storage. It is sent to the backend only when you run or test a provider-backed workflow.
               </p>
             </div>
 
