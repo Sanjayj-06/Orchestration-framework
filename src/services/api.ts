@@ -52,11 +52,15 @@ export async function discoverMolecules(request: string): Promise<ChemistryRunRe
   } catch {
     throw new Error('Saved provider settings could not be read. Please re-enter the provider key in Settings.');
   }
+  const configuredProvider = Object.keys(apiKeys || {}).find((provider) => Boolean(apiKeys?.[provider]?.trim()));
+  if (!configuredProvider) {
+    throw new Error('No provider key is saved in this browser. Open Settings, choose Google Gemini, paste the key, and click Save Configuration.');
+  }
 
   const res = await fetch(`${API_BASE}/chemistry/discover`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ request, api_keys: apiKeys, models })
+    body: JSON.stringify({ request, provider: configuredProvider, api_keys: apiKeys, models })
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Chemistry workflow failed.' }));

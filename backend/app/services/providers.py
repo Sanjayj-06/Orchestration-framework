@@ -69,6 +69,7 @@ class GeminiProvider(AIProvider):
         "gemini-2.0-flash": "gemini-3.5-flash",
         "gemini-2.5-flash": "gemini-3.5-flash",
         "gemini-2.5-pro": "gemini-3.5-flash",
+        "gemini-3.8-flash": "gemini-3.5-flash",
         "gemini-flash-latest": "gemini-3.5-flash-lite",
         "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
         "auto": "gemini-3.5-flash",

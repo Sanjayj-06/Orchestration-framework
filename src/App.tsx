@@ -46,6 +46,15 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchAgents]);
 
+  useEffect(() => {
+    const handleNavigate = (event: Event) => {
+      const tab = (event as CustomEvent<string>).detail;
+      if (tab === 'settings') setCurrentTab('settings');
+    };
+    window.addEventListener('agentcraft:navigate', handleNavigate);
+    return () => window.removeEventListener('agentcraft:navigate', handleNavigate);
+  }, []);
+
   // Navigation Handlers
   const handleStartCreateAgent = (prompt?: string, name?: string) => {
     setEditingAgent(null);

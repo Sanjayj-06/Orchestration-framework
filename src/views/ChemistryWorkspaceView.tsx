@@ -1,15 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Download, FlaskConical, Loader2, Play, Pause, RotateCcw, Sparkles } from 'lucide-react';
+import { CheckCircle2, Circle, Download, FlaskConical, Loader2, Pause, Play, RotateCcw, Sparkles, Workflow } from 'lucide-react';
 import * as $3Dmol from '3dmol';
 import { discoverMolecules, getMoleculeSdf, moleculeSvgUrl, type ChemistryMolecule, type ChemistryRunResult } from '../services/api';
 
 const defaultRequest = 'Generate 5 drug-like molecules with molecular weight below 400 Da and good aqueous solubility.';
+const pipelineAgents = [
+  'Chemistry Requirement Analyst',
+  'Molecular Research & Memory Agent',
+  'Molecule Generation Agent',
+  'Chemical Structure Validation Agent',
+  'Molecular Property Analysis Agent',
+  'Molecular Evaluation & Ranking Agent',
+  'Molecular Discovery Report Agent'
+];
 
 export const ChemistryWorkspaceView: React.FC = () => {
   const [request, setRequest] = useState(defaultRequest);
   const [result, setResult] = useState<ChemistryRunResult | null>(null);
   const [selected, setSelected] = useState<ChemistryMolecule | null>(null);
   const [running, setRunning] = useState(false);
+  const [activeAgentIndex, setActiveAgentIndex] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const [rotating, setRotating] = useState(true);
   const [representation, setRepresentation] = useState<'stick' | 'sphere' | 'ball-stick'>('ball-stick');
@@ -53,16 +63,31 @@ export const ChemistryWorkspaceView: React.FC = () => {
   const run = async () => {
     if (!request.trim()) return;
     setRunning(true);
+    setActiveAgentIndex(0);
     setError(null);
+    setResult(null);
     try {
       const next = await discoverMolecules(request.trim());
       setResult(next);
       setSelected(next.final_molecules[0] || null);
+      setActiveAgentIndex(pipelineAgents.length);
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : 'Chemistry workflow failed.');
     } finally {
       setRunning(false);
     }
+  };
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => {
+      setActiveAgentIndex((current) => Math.min(current + 1, pipelineAgents.length - 1));
+    }, 1400);
+    return () => window.clearInterval(timer);
+  }, [running]);
+
+  const openSettings = () => {
+    window.dispatchEvent(new CustomEvent('agentcraft:navigate', { detail: 'settings' }));
   };
 
   const downloadSdf = async () => {
@@ -91,7 +116,40 @@ export const ChemistryWorkspaceView: React.FC = () => {
               {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} {running ? 'Running pipeline' : 'Discover molecules'}
             </button>
           </div>
-          {error && <div className="mt-4 rounded-xl border border-rose-400/40 bg-rose-950/40 p-3 text-sm text-rose-200">{error}</div>}
+          {error && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-400/40 bg-rose-950/40 p-3 text-sm text-rose-200"><span>{error}</span>{error.includes('No provider key') && <button onClick={openSettings} className="rounded-lg bg-rose-200 px-3 py-1.5 font-semibold text-rose-950">Open Settings</button>}</div>}
+        </div>
+
+        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-cyan-300"><Workflow className="w-4 h-4" /> Default chemistry pipeline</div>
+              <p className="mt-1 text-xs text-slate-400">Each agent receives the structured output of the previous agent.</p>
+            </div>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${running ? 'bg-amber-400/15 text-amber-300' : result ? 'bg-emerald-400/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>
+              {running ? 'Pipeline running' : result ? 'Pipeline completed' : 'Ready to run'}
+            </span>
+          </div>
+          <div className="mt-5 grid gap-2 md:grid-cols-7">
+            {pipelineAgents.map((agent, index) => {
+              const completed = Boolean(result) || (running && index < activeAgentIndex);
+              const active = running && index === activeAgentIndex;
+              return (
+                <React.Fragment key={agent}>
+                  <div className={`rounded-xl border p-3 transition ${active ? 'border-cyan-400 bg-cyan-950/50 shadow-lg shadow-cyan-500/10' : completed ? 'border-emerald-400/40 bg-emerald-950/20' : 'border-slate-700 bg-slate-950/50'}`}>
+                    <div className="flex items-center gap-2">
+                      {completed ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" /> : active ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-cyan-300" /> : <Circle className="h-4 w-4 shrink-0 text-slate-600" />}
+                      <span className="text-[11px] font-semibold leading-tight text-slate-200">{agent}</span>
+                    </div>
+                    <div className={`mt-2 text-[10px] uppercase tracking-wider ${active ? 'text-cyan-300' : completed ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      {active ? 'Running' : completed ? 'Completed' : 'Queued'}
+                    </div>
+                  </div>
+                  {index < pipelineAgents.length - 1 && <div className="hidden items-center justify-center text-slate-600 md:flex">→</div>}
+                </React.Fragment>
+              );
+            })}
+          </div>
+          {result && <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-950/20 p-3 text-xs text-emerald-200">Pipeline output: {result.final_molecules.length} ranked molecule{result.final_molecules.length === 1 ? '' : 's'} passed through validation and property analysis.</div>}
         </div>
 
         {result && (
