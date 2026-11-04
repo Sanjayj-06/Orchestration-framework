@@ -25,10 +25,10 @@ export const LandingView: React.FC<LandingViewProps> = ({
         <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Welcome!!
+              Workspace overview
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Build and manage your AI agents.
+              Build, test, and manage the tools your team relies on.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -36,7 +36,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
               onClick={onExploreLibrary}
               className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-md text-[13px] font-medium transition shadow-sm"
             >
-              Browse Templates
+              View agents
             </button>
             <button
               onClick={() => onCreateAgent()}
@@ -65,7 +65,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
               <span className="text-2xl font-semibold text-slate-900 mt-1">0</span>
             </div>
             <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm flex flex-col">
-              <span className="text-xs text-slate-500 font-medium">Runs</span>
+              <span className="text-xs text-slate-500 font-medium">              Recent runs</span>
               <span className="text-2xl font-semibold text-slate-900 mt-1">24</span>
             </div>
           </div>

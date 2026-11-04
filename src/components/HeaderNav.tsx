@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, Plus, FlaskConical } from 'lucide-react';
+import { Network, Plus, FlaskConical } from 'lucide-react';
 
 interface HeaderNavProps {
   currentTab: 'landing' | 'library' | 'create' | 'dashboard' | 'pipeline' | 'templates' | 'chemistry' | 'settings';
@@ -22,19 +22,14 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
           onClick={() => onNavigate('landing')}
           className="flex items-center gap-3 group text-left transition focus:outline-none"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-500 p-0.5 shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform">
-            <div className="w-full h-full bg-white rounded-[10px] flex items-center justify-center">
-              <Bot className="w-5 h-5 text-blue-600 group-hover:text-blue-500 transition-colors" />
-            </div>
+          <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center group-hover:bg-blue-700 transition-colors">
+            <Network className="w-4 h-4 text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-slate-900 text-base tracking-tight">AgentCraft</span>
-              <span className="text-[10px] uppercase font-bold tracking-wider bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full">
-                No-Code
-              </span>
             </div>
-            <p className="text-[11px] text-slate-500">Canva for AI Agents</p>
+            <p className="text-[11px] text-slate-500">Agent workspace</p>
           </div>
         </button>
 
