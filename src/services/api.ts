@@ -10,6 +10,7 @@ const API_BASE = '/api';
 
 export interface ChemistryMolecule {
   id: string;
+  name?: string | null;
   rank?: number;
   canonical_smiles: string;
   validation: string;
@@ -60,11 +61,20 @@ export async function discoverMolecules(request: string): Promise<ChemistryRunRe
   const res = await fetch(`${API_BASE}/chemistry/discover`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ request, provider: configuredProvider, api_keys: apiKeys, models })
+    body: JSON.stringify({ request, provider: configuredProvider, api_keys: apiKeys, models, generation_attempts: 1 })
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Chemistry workflow failed.' }));
     throw new Error(err.detail || 'Chemistry workflow failed.');
+  }
+  return res.json();
+}
+
+export async function getChemistryDemoRun(): Promise<ChemistryRunResult> {
+  const res = await fetch(`${API_BASE}/chemistry/demo`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'No completed chemistry run is available for preview.' }));
+    throw new Error(err.detail || 'No completed chemistry run is available for preview.');
   }
   return res.json();
 }

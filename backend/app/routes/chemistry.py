@@ -2,11 +2,11 @@ from fastapi import APIRouter, HTTPException, Response
 from typing import List
 
 try:
-    from app.db.database import get_chemistry_run
+    from app.db.database import get_chemistry_run, get_latest_chemistry_run
     from app.models.chemistry_models import ChemistryDiscoveryRequest, ChemistryRunResult, ChemistryTemplate
     from app.services.chemistry import CHEMISTRY_TEMPLATES, molecule_sdf, molecule_svg, run_discovery
 except ImportError:
-    from ..db.database import get_chemistry_run
+    from ..db.database import get_chemistry_run, get_latest_chemistry_run
     from ..models.chemistry_models import ChemistryDiscoveryRequest, ChemistryRunResult, ChemistryTemplate
     from ..services.chemistry import CHEMISTRY_TEMPLATES, molecule_sdf, molecule_svg, run_discovery
 
@@ -17,7 +17,7 @@ async def get_chemistry_templates():
     return CHEMISTRY_TEMPLATES
 
 @router.post("/discover", response_model=ChemistryRunResult)
-async def discover_molecules(req: ChemistryDiscoveryRequest):
+def discover_molecules(req: ChemistryDiscoveryRequest):
     try:
         return run_discovery(req.request.strip(), req.provider, req.model, req.api_keys, req.models, req.generation_attempts)
     except RuntimeError as exc:
@@ -26,6 +26,13 @@ async def discover_molecules(req: ChemistryDiscoveryRequest):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Chemistry workflow failed: {exc}") from exc
+
+@router.get("/demo", response_model=ChemistryRunResult)
+def get_demo_run():
+    run = get_latest_chemistry_run()
+    if not run:
+        raise HTTPException(status_code=404, detail="No completed chemistry run is available for preview.")
+    return run["result"]
 
 @router.get("/runs/{run_id}", response_model=ChemistryRunResult)
 async def get_discovery_run(run_id: str):

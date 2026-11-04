@@ -62,10 +62,13 @@ def _provider(provider_name: str | None, model_name: str | None, api_keys: Dict[
 
 def _extract_json(text: str) -> Dict[str, Any]:
     cleaned = re.sub(r"```(?:json)?", "", text, flags=re.IGNORECASE).replace("```", "").strip()
-    start, end = cleaned.find("{"), cleaned.rfind("}")
-    if start < 0 or end <= start:
+    start = cleaned.find("{")
+    if start < 0:
         raise ValueError("Molecular generation provider returned no JSON object.")
-    value = json.loads(cleaned[start:end + 1])
+    try:
+        value, _ = json.JSONDecoder().raw_decode(cleaned[start:])
+    except json.JSONDecodeError as exc:
+        raise ValueError("Molecular generation provider returned malformed JSON.") from exc
     if not isinstance(value, dict):
         raise ValueError("Molecular generation provider returned an invalid JSON object.")
     return value
@@ -76,7 +79,8 @@ def _generate_candidates(request: str, requirements: ChemistryRequirements, prio
     prompt = f"""Generate {requirements.number_of_molecules} novel drug-like molecules for this request: {request}
 Requirements: {requirements.model_dump_json()}
 Previously generated canonical SMILES to avoid: {[m.get('canonical_smiles') for m in prior]}
-Return only JSON in this exact shape: {{"candidates":[{{"id":"MOL_001","smiles":"..."}}]}}.
+Return only JSON in this exact shape: {{"candidates":[{{"id":"MOL_001","name":"descriptive chemical name","smiles":"..."}}]}}.
+The name must describe the proposed molecule, not just repeat its ID. If an authoritative name cannot be determined, use null.
 Use valid SMILES. Do not explain or fabricate database results."""
     last_error: Exception | None = None
     for _ in range(attempts):
@@ -92,7 +96,11 @@ Use valid SMILES. Do not explain or fabricate database results."""
             result: List[Dict[str, str]] = []
             for index, candidate in enumerate(candidates[:requirements.number_of_molecules], 1):
                 if isinstance(candidate, dict) and isinstance(candidate.get("smiles"), str) and candidate["smiles"].strip():
-                    result.append({"id": str(candidate.get("id") or f"MOL_{index:03d}"), "smiles": candidate["smiles"].strip()})
+                    result.append({
+                        "id": str(candidate.get("id") or f"MOL_{index:03d}"),
+                        "name": str(candidate["name"]).strip() if candidate.get("name") else None,
+                        "smiles": candidate["smiles"].strip(),
+                    })
             if not result:
                 raise ValueError("Molecular generation returned no candidate SMILES.")
             return result
@@ -113,7 +121,7 @@ def _validate(candidates: List[Dict[str, str]]) -> Tuple[List[Dict[str, Any]], L
                 invalid.append({"id": candidate["id"], "smiles": candidate["smiles"], "error": "Duplicate canonical SMILES."})
                 continue
             seen.add(canonical)
-            valid.append({"id": candidate["id"], "canonical_smiles": canonical, "mol": molecule})
+            valid.append({"id": candidate["id"], "name": candidate.get("name"), "canonical_smiles": canonical, "mol": molecule})
         except Exception as exc:
             invalid.append({"id": candidate["id"], "smiles": candidate["smiles"], "error": str(exc)})
     return valid, invalid
@@ -159,7 +167,7 @@ def run_discovery(request: str, provider: str | None, model: str | None, api_key
         violations = sum([props["molecular_weight"] > requirements.max_molecular_weight, props["hbd"] > 5, props["hba"] > 10])
         passed = violations <= requirements.constraints.get("lipinski_violations", 1)
         reason = "Meets configured molecular weight and Lipinski constraints." if passed else "Rejected for exceeding configured molecular constraints."
-        result = {"id": item["id"], "canonical_smiles": item["canonical_smiles"], "validation": "passed", "properties": props, "passed_constraints": passed, "selection_reason": reason, "_score": props["qed"] - (violations * 0.2)}
+        result = {"id": item["id"], "name": item.get("name"), "canonical_smiles": item["canonical_smiles"], "validation": "passed", "properties": props, "passed_constraints": passed, "selection_reason": reason, "_score": props["qed"] - (violations * 0.2)}
         (evaluated if passed else rejected).append(result)
     trace.append({"agent": "Molecular Property Analysis Agent", "status": "completed", "duration_ms": round((time.perf_counter() - started) * 1000), "calculated": len(valid)})
     evaluated.sort(key=lambda item: item["_score"], reverse=True)

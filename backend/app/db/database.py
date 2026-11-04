@@ -419,3 +419,17 @@ def list_chemistry_molecules() -> List[Dict[str, Any]]:
         result = json.loads(row["result"])
         molecules.extend(result.get("final_molecules", []))
     return molecules
+
+def get_latest_chemistry_run() -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM chemistry_runs ORDER BY created_at DESC LIMIT 1").fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "request": row["request"],
+        "requirements": json.loads(row["requirements"]),
+        "result": json.loads(row["result"]),
+        "created_at": row["created_at"],
+    }

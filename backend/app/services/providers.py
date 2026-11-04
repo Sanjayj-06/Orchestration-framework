@@ -105,11 +105,14 @@ class GeminiProvider(AIProvider):
         # Ensure sufficient tokens for thinking models and output generation
         effective_max_tokens = max(max_tokens or 2048, 2048)
 
-        config = types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            temperature=temperature,
-            max_output_tokens=effective_max_tokens,
-        )
+        config_kwargs = {
+            "system_instruction": system_prompt,
+            "temperature": temperature,
+            "max_output_tokens": effective_max_tokens,
+        }
+        if "json" in f"{system_prompt} {message}".lower():
+            config_kwargs["response_mime_type"] = "application/json"
+        config = types.GenerateContentConfig(**config_kwargs)
 
         # Build normalized chat history for Gemini in google-genai format
         normalized_history = []

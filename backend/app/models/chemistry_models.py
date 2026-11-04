@@ -42,6 +42,7 @@ class MoleculeProperties(BaseModel):
 
 class ChemistryMolecule(BaseModel):
     id: str
+    name: Optional[str] = None
     rank: Optional[int] = None
     canonical_smiles: str
     validation: str
